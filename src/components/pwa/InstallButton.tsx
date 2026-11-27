@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import { copy } from '../../content/copy'
 import type { InstallPromptStore } from '../../features/pwa/installPrompt'
 import { IosInstallSheet } from './IosInstallSheet'
@@ -29,9 +30,11 @@ export function InstallButton({ store }: { store: InstallPromptStore }) {
       >
         {copy.pwa.install}
       </button>
-      {showIosSteps && (
-        <IosInstallSheet onClose={() => setShowIosSteps(false)} />
-      )}
+      {showIosSteps &&
+        createPortal(
+          <IosInstallSheet onClose={() => setShowIosSteps(false)} />,
+          document.body,
+        )}
     </>
   )
 }

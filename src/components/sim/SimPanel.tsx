@@ -10,6 +10,8 @@ type SimPanelProps = {
   controller: SimController
   suggestedStop: Destination
   onUseStop: (stop: Destination) => void
+  /** Where "Exit demo" goes (the real app). */
+  exitHref?: string
 }
 
 /** Controls for the demo ride. Only shown with ?sim in the URL. */
@@ -17,42 +19,65 @@ export function SimPanel({
   controller,
   suggestedStop,
   onUseStop,
+  exitHref,
 }: SimPanelProps) {
   const state = useSyncExternalStore(controller.subscribe, controller.getState)
   const progressId = useId()
 
+  const progressText = copy.sim.progressText(
+    formatDistance(state.progressM),
+    formatDistance(state.totalM),
+  )
+  const badge = (
+    <span className="shrink-0 rounded-full bg-jeep-yellow px-2 py-0.5 text-xs font-bold text-navy">
+      {copy.sim.badge}
+    </span>
+  )
+
+  // Positioned by the parent, in the overlay stack above the map.
   return (
     <section
       aria-label={copy.sim.label}
-      className="absolute inset-x-3 top-[4.5rem] z-[999] space-y-2 rounded-2xl bg-navy/95 p-3 text-white shadow-lg"
+      className="pointer-events-auto space-y-2 rounded-2xl bg-navy/95 p-3 text-white shadow-lg"
     >
-      <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-xs">
-          <span className="mr-1 rounded-full bg-jeep-yellow px-2 py-0.5 font-bold text-navy">
-            {copy.sim.badge}
-          </span>
-          {state.routeName}
-        </p>
-        {suggestedStop.name && (
-          <button
-            type="button"
-            onClick={() => onUseStop(suggestedStop)}
-            className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold hover:bg-white/25 focus-visible:ring-2 focus-visible:ring-jeep-yellow focus-visible:outline-none"
-          >
-            {copy.sim.useStop(suggestedStop.name)}
-          </button>
-        )}
-      </div>
-
       {!state.running ? (
-        <p className="text-sm text-white/85">{copy.sim.startHint}</p>
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex min-w-0 items-center gap-1 text-xs">
+              {badge}
+              <span className="truncate">{state.routeName}</span>
+            </p>
+            {suggestedStop.name && (
+              <button
+                type="button"
+                onClick={() => onUseStop(suggestedStop)}
+                className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold hover:bg-white/25 focus-visible:ring-2 focus-visible:ring-jeep-yellow focus-visible:outline-none"
+              >
+                {copy.sim.useStop(suggestedStop.name)}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-white/85">{copy.sim.startHint}</p>
+            {exitHref && (
+              <a
+                href={exitHref}
+                className="shrink-0 rounded text-xs font-semibold text-white underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-jeep-yellow focus-visible:outline-none"
+              >
+                {copy.demo.exit}
+              </a>
+            )}
+          </div>
+        </>
       ) : (
+        // While riding, keep it to two short rows so the map stays visible.
         <>
           <div className="flex items-center gap-2">
+            {badge}
             <button
               type="button"
               onClick={state.playing ? controller.pause : controller.play}
-              className="w-20 rounded-lg bg-white/15 px-3 py-1.5 text-sm font-semibold hover:bg-white/25 focus-visible:ring-2 focus-visible:ring-jeep-yellow focus-visible:outline-none"
+              className="w-16 rounded-lg bg-white/15 px-2 py-1 text-sm font-semibold hover:bg-white/25 focus-visible:ring-2 focus-visible:ring-jeep-yellow focus-visible:outline-none"
             >
               {state.playing ? copy.sim.pause : copy.sim.play}
             </button>
@@ -67,7 +92,7 @@ export function SimPanel({
                   type="button"
                   aria-pressed={state.rate === rate}
                   onClick={() => controller.setRate(rate)}
-                  className={`px-3 py-1.5 text-sm font-semibold focus-visible:ring-2 focus-visible:ring-jeep-yellow focus-visible:outline-none ${
+                  className={`px-2.5 py-1 text-sm font-semibold focus-visible:ring-2 focus-visible:ring-jeep-yellow focus-visible:outline-none ${
                     state.rate === rate
                       ? 'bg-jeep-yellow text-navy'
                       : 'hover:bg-white/15'
@@ -78,7 +103,7 @@ export function SimPanel({
               ))}
             </div>
           </div>
-          <div>
+          <div className="flex items-center gap-2">
             <label htmlFor={progressId} className="sr-only">
               {copy.sim.progress}
             </label>
@@ -89,18 +114,12 @@ export function SimPanel({
               max={Math.round(state.totalM)}
               step={50}
               value={Math.round(state.progressM)}
-              aria-valuetext={copy.sim.progressText(
-                formatDistance(state.progressM),
-                formatDistance(state.totalM),
-              )}
+              aria-valuetext={progressText}
               onChange={(event) => controller.seek(Number(event.target.value))}
-              className="h-2 w-full cursor-pointer accent-jeep-yellow"
+              className="h-2 min-w-0 flex-1 cursor-pointer accent-jeep-yellow"
             />
-            <p className="text-right text-[11px] text-white/70 tabular-nums">
-              {copy.sim.progressText(
-                formatDistance(state.progressM),
-                formatDistance(state.totalM),
-              )}
+            <p className="shrink-0 text-[11px] text-white/75 tabular-nums">
+              {progressText}
             </p>
           </div>
         </>

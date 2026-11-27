@@ -44,7 +44,7 @@ export function RadiusSlider({ value, onChange }: RadiusSliderProps) {
         }
         className="h-2 w-full cursor-pointer accent-navy"
       />
-      <div className="flex justify-between text-xs text-ink/60" aria-hidden>
+      <div className="flex justify-between text-xs text-ink/70" aria-hidden>
         <span>{formatDistance(RADIUS_MIN_M)}</span>
         <span>{formatDistance(RADIUS_MAX_M)}</span>
       </div>

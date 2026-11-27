@@ -63,6 +63,19 @@ vi.mock('../components/map/MapView', () => ({
   ),
 }))
 
+/**
+ * Taps Start trip, then the confirming button of whichever sheet appears
+ * (first-trip intro, or the location explainer). That second tap is the one
+ * that starts the trip.
+ */
+function tapStartTrip() {
+  fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
+  for (const name of [copy.tripIntro.start, copy.location.explainer.allow]) {
+    const button = screen.queryByRole('button', { name })
+    if (button) fireEvent.click(button)
+  }
+}
+
 const AYALA = { lat: 14.5492, lng: 121.0279 }
 /** Where the stub map's "tap map" button drops the pin. */
 const TAPPED = { lat: 14.6537, lng: 121.0328 }
@@ -310,7 +323,7 @@ describe('App', () => {
         )
         expect(within(panel()).getByText('Ayala')).toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
+        tapStartTrip()
         expect(screen.queryByRole('dialog')).toBeNull()
         expect(map().dataset.user).not.toBe('')
         // North Avenue to Ayala is roughly 12 km by straight line.
@@ -404,7 +417,7 @@ describe('App', () => {
         fireEvent.click(
           screen.getByRole('button', { name: copy.sim.useStop('Ayala') }),
         )
-        fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
+        tapStartTrip()
         fireEvent.click(screen.getByRole('button', { name: copy.sound.test }))
         // The demo ride starts at North Avenue, about 12 km from Ayala.
         expect(
@@ -448,13 +461,7 @@ describe('App', () => {
       }
       const setStop = () =>
         fireEvent.click(screen.getByRole('button', { name: 'tap map' }))
-      const startTrip = () => {
-        fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
-        const allow = screen.queryByRole('button', {
-          name: copy.location.explainer.allow,
-        })
-        if (allow) fireEvent.click(allow)
-      }
+      const startTrip = tapStartTrip
       return {
         gps,
         audio,
@@ -476,15 +483,21 @@ describe('App', () => {
       expect(screen.getByText(copy.trip.needStop)).toBeInTheDocument()
     })
 
-    it('one tap unlocks sound, keeps the screen on and starts GPS', () => {
+    it('first trip: explains keeping the app open, then one tap starts everything', () => {
       const { gps, audio, wakeLock, setStop } = renderTrip()
       setStop()
       fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
 
-      // Location isn't allowed yet, so it explains first; "Allow" is the tap.
+      // The first trip explains itself; its button is the starting tap.
+      const intro = screen.getByRole('dialog', { name: copy.tripIntro.title })
+      expect(intro).toHaveTextContent(copy.tripIntro.keepOpen)
+      expect(intro).toHaveTextContent(copy.tripIntro.location)
+      expect(gps.provider.start).not.toHaveBeenCalled()
       fireEvent.click(
-        screen.getByRole('button', { name: copy.location.explainer.allow }),
+        within(intro).getByRole('button', { name: copy.tripIntro.start }),
       )
+      // The intro covered location, so no second sheet.
+      expect(screen.queryByRole('dialog')).toBeNull()
       expect(audio.unlock).toHaveBeenCalled()
       expect(wakeLock.request).toHaveBeenCalled()
       expect(gps.provider.start).toHaveBeenCalled()
@@ -605,6 +618,73 @@ describe('App', () => {
       expect(screen.queryByRole('alertdialog')).toBeNull()
     })
 
+    it('shows the intro only once, ever', () => {
+      const settingsStore = createMemoryStore()
+      const first = renderTrip({ settingsStore })
+      first.setStop()
+      first.startTrip()
+      fireEvent.click(screen.getByRole('button', { name: copy.trip.end }))
+      first.unmount()
+
+      const again = renderTrip({ settingsStore })
+      again.setStop()
+      fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
+      expect(
+        screen.queryByRole('dialog', { name: copy.tripIntro.title }),
+      ).toBeNull()
+    })
+
+    it('"Not now" on the intro starts nothing and asks again next time', () => {
+      const { gps, setStop } = renderTrip()
+      setStop()
+      fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
+      fireEvent.click(
+        screen.getByRole('button', { name: copy.tripIntro.cancel }),
+      )
+      expect(gps.provider.start).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
+      expect(
+        screen.getByRole('dialog', { name: copy.tripIntro.title }),
+      ).toBeVisible()
+    })
+
+    it('makes the app behind a dialog unreachable (inert)', () => {
+      const { setStop } = renderTrip()
+      setStop()
+      fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
+      expect(
+        screen
+          .getByRole('heading', { level: 1, name: 'Para Po' })
+          .closest('[inert]'),
+      ).not.toBeNull()
+      fireEvent.click(
+        screen.getByRole('button', { name: copy.tripIntro.cancel }),
+      )
+      expect(document.querySelector('[inert]')).toBeNull()
+    })
+
+    it('announces milestones for screen readers on the way in', () => {
+      const { ride, setStop, startTrip } = renderTrip()
+      setStop()
+      startTrip()
+      const live = () => screen.getByTestId('trip-announcer').textContent
+      ride(1200)
+      expect(live()).toBe('')
+      ride(950)
+      expect(live()).toBe('1 km to your stop')
+      ride(600)
+      ride(480)
+      expect(live()).toBe('500 m to your stop')
+    })
+
+    it('offers a demo ride on the start screen', () => {
+      renderTrip()
+      expect(screen.getByRole('link', { name: copy.demo.try })).toHaveAttribute(
+        'href',
+        '/?sim=edsa&speed=10',
+      )
+    })
+
     it('remembers the radius and ringtone for next time', () => {
       const settingsStore = createMemoryStore()
       const first = renderTrip({ settingsStore })
@@ -623,6 +703,7 @@ describe('App', () => {
       expect(settingsStore.read(SETTINGS_KEY)).toEqual({
         radiusM: 650,
         ringtoneId: 'bell',
+        introSeen: false,
       })
       first.unmount()
 

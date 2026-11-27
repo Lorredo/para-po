@@ -75,6 +75,7 @@ test('demo ride moves the dot towards the stop', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Set stop: Ayala' }).click()
   await page.getByRole('button', { name: 'Start trip' }).click()
+  await page.getByRole('button', { name: 'Got it, start trip' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.locator('.para-po-user-dot')).toBeVisible()
 

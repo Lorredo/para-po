@@ -46,7 +46,11 @@ export function AlarmOverlay({
     >
       <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
         <BellIcon />
-        <h2 id={titleId} className="text-5xl font-extrabold tracking-tight">
+        <h2
+          id={titleId}
+          lang="fil"
+          className="text-5xl font-extrabold tracking-tight"
+        >
           {copy.alarm.title}
         </h2>
         <p id={bodyId} className="max-w-xs text-xl font-semibold">

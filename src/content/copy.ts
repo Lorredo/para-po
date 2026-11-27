@@ -100,6 +100,29 @@ export const copy = {
       done: 'Plan another trip',
     },
   },
+  announce: {
+    distance: (distance: string) => `${distance} to your stop`,
+    entering: "Entering your stop's alert zone",
+  },
+  tripIntro: {
+    title: 'Before your first trip',
+    keepOpen:
+      'Keep Para Po open and on screen until your stop. Phones pause web apps when the screen locks or you switch apps.',
+    volume: "Turn your volume up. Para Po can't change it for you.",
+    location:
+      'Para Po will ask for your location next. It stays on your phone and is never uploaded.',
+    start: 'Got it, start trip',
+    cancel: 'Not now',
+  },
+  returned: {
+    body: (away: string) =>
+      `Para Po was in the background for ${away}, so tracking may have paused. Keep it open on screen until your stop.`,
+    dismiss: 'OK',
+  },
+  demo: {
+    try: 'No ride right now? Try a demo ride',
+    exit: 'Exit demo',
+  },
   pwa: {
     install: 'Install',
     offline:

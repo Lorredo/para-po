@@ -56,3 +56,13 @@
     @apply bg-paper font-sans text-ink antialiased;
   }
 }
+
+/*
+ * On short screens the map is small and the zoom buttons collide with the
+ * search bar. Phones can pinch to zoom, so drop the buttons there.
+ */
+@media (max-height: 740px) and (pointer: coarse) {
+  .leaflet-control-zoom {
+    display: none;
+  }
+}

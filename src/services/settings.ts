@@ -16,6 +16,8 @@ import { type KeyValueStore, localStore } from './storage'
 export type Settings = {
   radiusM: number
   ringtoneId: RingtoneId
+  /** The "before your first trip" sheet has been shown. */
+  introSeen: boolean
 }
 
 export const SETTINGS_KEY = 'para-po:settings:v1'
@@ -23,13 +25,14 @@ export const SETTINGS_KEY = 'para-po:settings:v1'
 export const DEFAULT_SETTINGS: Settings = {
   radiusM: RADIUS_DEFAULT_M,
   ringtoneId: DEFAULT_RINGTONE,
+  introSeen: false,
 }
 
 /** Reads saved settings, falling back field by field on anything invalid. */
 export function loadSettings(store: KeyValueStore = localStore): Settings {
   const raw = store.read(SETTINGS_KEY)
   if (typeof raw !== 'object' || raw === null) return DEFAULT_SETTINGS
-  const { radiusM, ringtoneId } = raw as Record<string, unknown>
+  const { radiusM, ringtoneId, introSeen } = raw as Record<string, unknown>
   return {
     radiusM:
       typeof radiusM === 'number' && Number.isFinite(radiusM)
@@ -38,6 +41,7 @@ export function loadSettings(store: KeyValueStore = localStore): Settings {
     ringtoneId: isRingtoneId(ringtoneId)
       ? ringtoneId
       : DEFAULT_SETTINGS.ringtoneId,
+    introSeen: introSeen === true,
   }
 }
 

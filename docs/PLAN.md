@@ -19,8 +19,8 @@ This is the living plan for Para Po, a web-based destination alarm (PWA) for jee
 | M5 Audio, vibration and alarm screen           | ✅ Done |
 | M6 Trip start/stop and screen wake lock        | ✅ Done |
 | M7 Installable PWA and offline app shell       | ✅ Done |
-| M8 Resilience and polish                       | ⏭ Next  |
-| M9 Real-ride field test and portfolio README   | Planned |
+| M8 Resilience and polish                       | ✅ Done |
+| M9 Real-ride field test and portfolio README   | ⏭ Next  |
 
 ## Goals and constraints
 
@@ -173,13 +173,26 @@ From then on, each GPS fix goes to `geofence.evaluate()` (a pure function). When
 - [x] `vercel.json`: `sw.js`, `workbox-*.js` and the manifest are always revalidated (route patterns are unit-tested; see Decisions)
 - [x] End-to-end tests against the production build: manifest and icon sizes, **Chrome reports no installability errors**, the service worker takes control, the app opens offline with the brand font, and the offline notice comes and goes; no console errors in dev
 
-### ⏭ M8: Resilience and polish
+### ✅ M8: Resilience and polish
 
-- [ ] First-run explainer: keep Para Po open with the screen on
-- [ ] Banner when returning to the app: "Tracking may have paused while you were away"
-- [ ] Accessibility pass: contrast, focus, screen-reader announcements, reduced motion
-- [ ] A visible "Try a demo ride" entry point
-- [ ] Short screens (e.g. iPhone SE/14 in Safari): the trip panel takes too much height; make it scroll or collapse so the map stays usable
+- [x] First-trip intro, shown once: keep Para Po open and on screen, turn the volume up, and (if needed) location will be asked next. Its button is the tap that starts the trip, so sound still unlocks; it replaces the separate location explainer for that first trip.
+- [x] "Welcome back" notice: after more than 3 s in the background during a trip, says for how long and that tracking may have paused
+- [x] Accessibility:
+  - automated **axe-core** audit (WCAG 2.1 A/AA) of the start screen, first-trip intro, running trip and alarm screen, with zero violations (verified to catch a planted contrast failure);
+  - screen-reader announcements at 2 km, 1 km and 500 m, and on entering the alert zone;
+  - the app behind any dialog is `inert`;
+  - Leaflet zoom, fade and marker animations follow reduced motion;
+  - small grey text raised from 60% to 70% ink (~4.1:1 to ~5.6:1);
+  - "Para po!" marked `lang="fil"`.
+- [x] **Try a demo ride** link on the start screen; **Exit demo** inside the demo
+- [x] Short screens (iPhone SE size, 375×667):
+  - the panel scrolls within 58% of the height, with Start/End trip pinned;
+  - search hides during a trip;
+  - the demo panel shrinks to two rows while riding;
+  - overlay height is measured (not assumed) for map framing;
+  - zoom buttons hidden on short touch screens (pinch instead).
+
+  End-to-end tests check the map stays usable and the rider stays visible.
 
 ### M9: Field test and portfolio
 
@@ -238,6 +251,12 @@ Choices made during the build, and why.
 | M7   | Render icons with Playwright instead of adding an image library                   | It's already a dev dependency; one script, committed PNGs. Also caught: `URL.pathname` breaks on the space in "Para Po", so it uses `fileURLToPath`.                                                                                                                                |
 | M7   | Leave 4 moderate `npm audit` advisories (glob, minimatch)                         | They're inside Workbox's build tooling, run only at build time on the developer's machine, and never ship to users. `npm audit fix --force` would downgrade the PWA plugin. Revisit when Workbox updates.                                                                           |
 | M7   | Test `vercel.json` route patterns before pushing                                  | The first M7 push failed on Vercel (`invalid-route-source-pattern`: a nested capture group in a header source) and nothing deployed. A unit test now parses every source with `path-to-regexp` v6, as Vercel does; it was checked against the broken file to confirm it catches it. |
+| M8   | One first-trip intro instead of two sheets                                        | Keeping the app on screen is the most important thing a web alarm user must know; it also covers the location heads-up, so first-time riders see one sheet, not two.                                                                                                                |
+| M8   | Announce only milestones (2 km, 1 km, 500 m, entering)                            | Reading the distance every second would drown out everything else for screen-reader users.                                                                                                                                                                                          |
+| M8   | `inert` behind dialogs instead of a hand-rolled focus trap                        | The platform does it properly (focus, clicks and the accessibility tree), with one attribute.                                                                                                                                                                                       |
+| M8   | Hide search during a trip; compact demo panel while riding                        | Found with an iPhone SE screenshot: the demo controls covered almost the whole map, and my first short-screen test only checked the start screen.                                                                                                                                   |
+| M8   | Measure the overlay height for map framing                                        | The fixed 210 px guess was taller than the whole map on small phones, so framing silently failed.                                                                                                                                                                                   |
+| M8   | Check the axe audit can fail                                                      | A suite that passes first time proves nothing on its own; a planted low-contrast line confirmed axe flags `color-contrast` in this setup.                                                                                                                                           |
 
 ## Risks and mitigations
 

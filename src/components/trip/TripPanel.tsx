@@ -25,6 +25,8 @@ type TripPanelProps = {
    * summary so the map keeps its space.
    */
   settingsSummary?: string | undefined
+  /** Shown under the empty state, e.g. the "Try a demo ride" link. */
+  emptyExtra?: ReactNode
 }
 
 export function TripPanel({
@@ -39,6 +41,7 @@ export function TripPanel({
   actions,
   clearDisabled = false,
   settingsSummary,
+  emptyExtra,
 }: TripPanelProps) {
   const settings = (
     <>
@@ -50,20 +53,21 @@ export function TripPanel({
   return (
     <section
       aria-label={copy.setup.sectionLabel}
-      className="relative z-[1000] space-y-4 rounded-t-2xl bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
+      // On short screens the panel scrolls instead of squeezing the map.
+      className="relative z-[1000] max-h-[58dvh] space-y-4 overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
     >
       {notice}
 
       {destination ? (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-xs font-semibold tracking-wide text-ink/60 uppercase">
+            <h2 className="text-xs font-semibold tracking-wide text-ink/70 uppercase">
               {copy.setup.destinationTitle}
             </h2>
             <p className="truncate text-base font-bold text-navy">
               {destination.name ?? copy.setup.droppedPin}
             </p>
-            <p className="text-xs text-ink/60 tabular-nums">
+            <p className="text-xs text-ink/70 tabular-nums">
               {destination.kind && <>{destination.kind} · </>}
               {formatLatLng(destination)}
             </p>
@@ -76,7 +80,7 @@ export function TripPanel({
                   </span>
                 </p>
                 {accuracyM !== null && (
-                  <p className="text-xs text-ink/60 tabular-nums">
+                  <p className="text-xs text-ink/70 tabular-nums">
                     {copy.location.accuracy(accuracyM)}
                   </p>
                 )}
@@ -102,6 +106,7 @@ export function TripPanel({
             {copy.setup.emptyTitle}
           </h2>
           <p className="text-sm text-ink/80">{copy.setup.emptyHint}</p>
+          {emptyExtra}
         </div>
       )}
 
@@ -115,7 +120,12 @@ export function TripPanel({
       ) : (
         settings
       )}
-      {actions}
+      {actions && (
+        // Start/End trip stays in reach even when the panel scrolls.
+        <div className="sticky -bottom-4 -mx-4 bg-white px-4 pt-2 pb-4">
+          {actions}
+        </div>
+      )}
     </section>
   )
 }

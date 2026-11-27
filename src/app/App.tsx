@@ -1,4 +1,5 @@
 import {
+  type RefObject,
   useCallback,
   useEffect,
   useRef,
@@ -21,7 +22,9 @@ import { LocationExplainer } from '../components/system/LocationExplainer'
 import { LocationNotice } from '../components/system/LocationNotice'
 import { SoundSettings } from '../components/trip/SoundSettings'
 import { TripControls } from '../components/trip/TripControls'
+import { ReturnNotice } from '../components/trip/ReturnNotice'
 import { TripEndedCard } from '../components/trip/TripEndedCard'
+import { TripIntroSheet } from '../components/trip/TripIntroSheet'
 import { TripNotices } from '../components/trip/TripNotices'
 import { TripPanel } from '../components/trip/TripPanel'
 import { copy } from '../content/copy'
@@ -36,6 +39,8 @@ import { useAppUpdate } from '../features/pwa/useAppUpdate'
 import { useOnlineStatus } from '../features/pwa/useOnlineStatus'
 import { useSettings } from '../features/settings/useSettings'
 import type { Destination } from '../features/trip/types'
+import { useDistanceAnnouncer } from '../features/trip/announcements'
+import { useBackgroundReturn } from '../features/trip/useBackgroundReturn'
 import { useTrip } from '../features/trip/useTrip'
 import { haversineM } from '../lib/geo/distance'
 import { formatDistance } from '../lib/geo/format'
@@ -61,6 +66,27 @@ import {
 
 /** Frames about 900 m around the user: street level, with some context. */
 const USER_FOCUS_RADIUS_M = 300
+/**
+ * How far down the map the floating overlays reach (search bar, demo
+ * panel), so framed stops and riders aren't hidden under them.
+ */
+function useOverlayInset(ref: RefObject<HTMLElement | null>): number {
+  const [inset, setInset] = useState(80)
+  useEffect(() => {
+    const element = ref.current
+    if (!element || typeof ResizeObserver === 'undefined') return
+    const measure = () =>
+      setInset(element.offsetTop + element.offsetHeight + 12)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return inset
+}
+
+/** The public demo: a simulated ride down EDSA at 10× speed. */
+const DEMO_HREF = '/?sim=edsa&speed=10'
 
 type AppProps = {
   /** Injected in tests; defaults to real GPS, or a demo ride with ?sim. */
@@ -97,6 +123,9 @@ export default function App({
   )
   /** Follow mode during a trip; off once the user pans, on again via locate. */
   const [following, setFollowing] = useState(true)
+  const [introOpen, setIntroOpen] = useState(false)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const topInsetPx = useOverlayInset(overlayRef)
 
   const location = useLocationTracking(source.provider)
   const permission = useGeolocationPermission(!isSim)
@@ -141,6 +170,7 @@ export default function App({
   useEffect(() => {
     tripActiveRef.current = trip.isActive
   }, [trip.isActive])
+  const tripActive = trip.phase === 'active'
 
   /** Explain before the browser asks for location, unless it already decided. */
   const needsExplainer =
@@ -162,10 +192,14 @@ export default function App({
 
   const handleStartTrip = useCallback(() => {
     setFollowing(true)
-    // Skip the explainer if location is already running.
-    if (needsExplainer && location.status === 'off') setExplainerFor('trip')
+    // First trip: explain keeping the app open (and location, if needed).
+    // The sheet's button is then the tap that starts the trip.
+    if (!settings.introSeen) setIntroOpen(true)
+    // Skip the location explainer if location is already running.
+    else if (needsExplainer && location.status === 'off')
+      setExplainerFor('trip')
     else trip.start()
-  }, [needsExplainer, location.status, trip])
+  }, [settings.introSeen, needsExplainer, location.status, trip])
 
   const handleEndTrip = useCallback(() => {
     alarm.stop()
@@ -214,116 +248,159 @@ export default function App({
   }, [trip])
 
   const distanceM = destination && fix ? haversineM(fix, destination) : null
+  const backgroundReturn = useBackgroundReturn(tripActive)
+  const announcement = useDistanceAnnouncer(distanceM, radiusM, tripActive)
   const follow: FollowTarget | null =
     trip.phase === 'active' && following && fix && destination
       ? { user: fix, stop: destination, radiusM }
       : null
   const ringing = alarm.state.status === 'ringing' ? alarm.state : null
+  // While a dialog is open, everything behind it is unreachable (inert).
+  const modalOpen = ringing !== null || explainerFor !== null || introOpen
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 bg-navy px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 text-white">
-        <Logo size={32} />
-        <div>
-          <h1 className="text-base leading-tight font-bold">{copy.appName}</h1>
-          <p className="text-xs text-white/80">{copy.tagline}</p>
-        </div>
-        <InstallButton store={installPrompt} />
-      </header>
+    <>
+      <div className="flex h-full flex-col" inert={modalOpen}>
+        <header className="flex items-center gap-3 bg-navy px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 text-white">
+          <Logo size={32} />
+          <div>
+            <h1 className="text-base leading-tight font-bold">
+              {copy.appName}
+            </h1>
+            <p className="text-xs text-white/80">{copy.tagline}</p>
+          </div>
+          <InstallButton store={installPrompt} />
+        </header>
 
-      <main className="relative min-h-0 flex-1">
-        <MapView
+        <main className="relative min-h-0 flex-1">
+          <MapView
+            destination={destination}
+            radiusM={radiusM}
+            focus={focus}
+            onDestinationChange={handleMapPick}
+            userFix={fix}
+            locateStatus={location.status}
+            onLocate={handleLocate}
+            follow={follow}
+            onUserPan={() => setFollowing(false)}
+            topInsetPx={topInsetPx}
+          />
+          {/* Everything floating over the top of the map, measured so the map
+              can keep framed things out from under it. */}
+          <div
+            ref={overlayRef}
+            className="pointer-events-none absolute inset-x-3 top-3 z-[1000] space-y-2"
+          >
+            {/* Mid-trip, the map needs the room more than search does. */}
+            {!tripActive && <DestinationSearch onPick={handleSearchPick} />}
+            {source.sim && (
+              <SimPanel
+                controller={source.sim.controller}
+                suggestedStop={source.sim.route.suggestedStop}
+                onUseStop={handleUseSimStop}
+                exitHref="/"
+              />
+            )}
+          </div>
+        </main>
+
+        <TripPanel
           destination={destination}
           radiusM={radiusM}
-          focus={focus}
-          onDestinationChange={handleMapPick}
-          userFix={fix}
-          locateStatus={location.status}
-          onLocate={handleLocate}
-          follow={follow}
-          onUserPan={() => setFollowing(false)}
-          topInsetPx={isSim ? 210 : 80}
+          onRadiusChange={settings.setRadiusM}
+          onClearDestination={clearDestination}
+          clearDisabled={trip.phase === 'active'}
+          settingsSummary={
+            trip.phase === 'active'
+              ? copy.trip.settingsSummary(
+                  formatDistance(radiusM),
+                  copy.sound.ringtones[ringtoneId],
+                )
+              : undefined
+          }
+          distanceM={distanceM}
+          accuracyM={fix?.accuracyM ?? null}
+          notice={
+            <>
+              <PwaNotices
+                online={online}
+                needRefresh={appUpdate.needRefresh}
+                offlineReady={appUpdate.offlineReady}
+                tripActive={trip.phase === 'active'}
+                onUpdate={appUpdate.update}
+                onDismissUpdate={appUpdate.dismissUpdate}
+                onDismissOfflineReady={appUpdate.dismissOfflineReady}
+              />
+              {backgroundReturn.awayMs !== null && (
+                <ReturnNotice
+                  awayMs={backgroundReturn.awayMs}
+                  onDismiss={backgroundReturn.dismiss}
+                />
+              )}
+              {trip.phase === 'ended' && (
+                <TripEndedCard onDone={handlePlanAnother} />
+              )}
+              {alarm.state.status === 'snoozed' && (
+                <SnoozeNotice
+                  until={alarm.state.until}
+                  onTurnOff={handleGettingOff}
+                />
+              )}
+              {trip.phase === 'active' && (
+                <TripNotices
+                  wakeLock={wakeStatus}
+                  startedNear={trip.startedNear}
+                  stopName={destination?.name}
+                  gpsStale={trip.gpsStale}
+                  rejectReason={trip.result?.rejectReason}
+                  accuracyM={fix?.accuracyM ?? null}
+                />
+              )}
+              <LocationNotice
+                status={location.status}
+                error={location.error}
+                onDismiss={location.stop}
+              />
+            </>
+          }
+          footer={
+            <SoundSettings
+              audio={audio}
+              ringtoneId={ringtoneId}
+              onRingtoneChange={settings.setRingtoneId}
+              onTestAlarm={handleTestAlarm}
+            />
+          }
+          emptyExtra={
+            isSim ? undefined : (
+              <a
+                href={DEMO_HREF}
+                className="mt-1 inline-block rounded text-sm font-semibold text-navy underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-navy focus-visible:outline-none"
+              >
+                {copy.demo.try}
+              </a>
+            )
+          }
+          actions={
+            <TripControls
+              phase={trip.phase}
+              canStart={destination !== null}
+              onStart={handleStartTrip}
+              onEnd={handleEndTrip}
+            />
+          }
         />
-        <DestinationSearch onPick={handleSearchPick} />
-        {source.sim && (
-          <SimPanel
-            controller={source.sim.controller}
-            suggestedStop={source.sim.route.suggestedStop}
-            onUseStop={handleUseSimStop}
-          />
-        )}
-      </main>
 
-      <TripPanel
-        destination={destination}
-        radiusM={radiusM}
-        onRadiusChange={settings.setRadiusM}
-        onClearDestination={clearDestination}
-        clearDisabled={trip.phase === 'active'}
-        settingsSummary={
-          trip.phase === 'active'
-            ? copy.trip.settingsSummary(
-                formatDistance(radiusM),
-                copy.sound.ringtones[ringtoneId],
-              )
-            : undefined
-        }
-        distanceM={distanceM}
-        accuracyM={fix?.accuracyM ?? null}
-        notice={
-          <>
-            <PwaNotices
-              online={online}
-              needRefresh={appUpdate.needRefresh}
-              offlineReady={appUpdate.offlineReady}
-              tripActive={trip.phase === 'active'}
-              onUpdate={appUpdate.update}
-              onDismissUpdate={appUpdate.dismissUpdate}
-              onDismissOfflineReady={appUpdate.dismissOfflineReady}
-            />
-            {trip.phase === 'ended' && (
-              <TripEndedCard onDone={handlePlanAnother} />
-            )}
-            {alarm.state.status === 'snoozed' && (
-              <SnoozeNotice
-                until={alarm.state.until}
-                onTurnOff={handleGettingOff}
-              />
-            )}
-            {trip.phase === 'active' && (
-              <TripNotices
-                wakeLock={wakeStatus}
-                startedNear={trip.startedNear}
-                stopName={destination?.name}
-                gpsStale={trip.gpsStale}
-                rejectReason={trip.result?.rejectReason}
-                accuracyM={fix?.accuracyM ?? null}
-              />
-            )}
-            <LocationNotice
-              status={location.status}
-              error={location.error}
-              onDismiss={location.stop}
-            />
-          </>
-        }
-        footer={
-          <SoundSettings
-            audio={audio}
-            ringtoneId={ringtoneId}
-            onRingtoneChange={settings.setRingtoneId}
-            onTestAlarm={handleTestAlarm}
-          />
-        }
-        actions={
-          <TripControls
-            phase={trip.phase}
-            canStart={destination !== null}
-            onStart={handleStartTrip}
-            onEnd={handleEndTrip}
-          />
-        }
-      />
+        {/* Spoken milestones for screen-reader users during a trip. */}
+        <p
+          role="status"
+          aria-live="polite"
+          className="sr-only"
+          data-testid="trip-announcer"
+        >
+          {announcement}
+        </p>
+      </div>
 
       {ringing && (
         <AlarmOverlay
@@ -332,6 +409,19 @@ export default function App({
           distanceM={distanceM}
           onStop={ringing.reason === 'test' ? alarm.stop : handleGettingOff}
           onSnooze={ringing.reason === 'test' ? undefined : alarm.snooze}
+        />
+      )}
+
+      {introOpen && (
+        <TripIntroSheet
+          mentionLocation={needsExplainer && location.status === 'off'}
+          onStart={() => {
+            setIntroOpen(false)
+            settings.markIntroSeen()
+            // Still inside the tap, so the trip can unlock sound.
+            trip.start()
+          }}
+          onCancel={() => setIntroOpen(false)}
         />
       )}
 
@@ -347,6 +437,6 @@ export default function App({
           onCancel={() => setExplainerFor(null)}
         />
       )}
-    </div>
+    </>
   )
 }

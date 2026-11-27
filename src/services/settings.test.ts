@@ -14,8 +14,12 @@ describe('settings', () => {
 
   it('round-trips saved settings', () => {
     const store = createMemoryStore()
-    saveSettings({ radiusM: 750, ringtoneId: 'chime' }, store)
-    expect(loadSettings(store)).toEqual({ radiusM: 750, ringtoneId: 'chime' })
+    saveSettings({ radiusM: 750, ringtoneId: 'chime', introSeen: true }, store)
+    expect(loadSettings(store)).toEqual({
+      radiusM: 750,
+      ringtoneId: 'chime',
+      introSeen: true,
+    })
   })
 
   it('repairs each field independently', () => {
@@ -24,12 +28,14 @@ describe('settings', () => {
     expect(loadSettings(store)).toEqual({
       radiusM: 2000,
       ringtoneId: DEFAULT_SETTINGS.ringtoneId,
+      introSeen: false,
     })
 
     store.write(SETTINGS_KEY, { radiusM: 'far', ringtoneId: 'bell' })
     expect(loadSettings(store)).toEqual({
       radiusM: DEFAULT_SETTINGS.radiusM,
       ringtoneId: 'bell',
+      introSeen: false,
     })
   })
 

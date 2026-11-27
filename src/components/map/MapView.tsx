@@ -30,6 +30,11 @@ import { LocateButton } from './LocateButton'
 import { MapControl } from './MapControl'
 import { UserLocationLayer } from './UserLocationLayer'
 
+/** Read once: Leaflet's animation options can't change after creation. */
+const prefersReducedMotion =
+  typeof window !== 'undefined' &&
+  (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
+
 /** Ask the map to frame a place. A new object triggers a new move. */
 export type MapFocusRequest = {
   center: LatLng
@@ -85,6 +90,9 @@ export function MapView({
       zoom={DEFAULT_ZOOM}
       minZoom={MIN_ZOOM}
       zoomControl={false}
+      zoomAnimation={!prefersReducedMotion}
+      fadeAnimation={!prefersReducedMotion}
+      markerZoomAnimation={!prefersReducedMotion}
       className="h-full w-full"
       aria-label={copy.map.label}
     >
@@ -158,10 +166,15 @@ function FitContainer() {
 const reduceMotion = () =>
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 
-/** Padding that keeps framed things clear of the overlays on the map. */
-function framePadding(topInsetPx: number) {
+/**
+ * Padding that keeps framed things clear of the overlays on the map. On a
+ * short screen the overlays can be most of the map, so never use more than
+ * half its height, or there'd be nothing left to frame into.
+ */
+function framePadding(map: LeafletMap, topInsetPx: number) {
+  const top = Math.min(topInsetPx, map.getSize().y * 0.5)
   return {
-    paddingTopLeft: [16, topInsetPx] as PointTuple,
+    paddingTopLeft: [16, top] as PointTuple,
     paddingBottomRight: [56, 16] as PointTuple, // room for the map buttons
     maxZoom: 17,
   }
@@ -170,8 +183,9 @@ function framePadding(topInsetPx: number) {
 /** The part of the map not hidden behind the search bar or buttons. */
 function visibleBounds(map: LeafletMap, topInsetPx: number) {
   const size = map.getSize()
+  const top = Math.min(topInsetPx, size.y * 0.5)
   return latLngBounds(
-    map.containerPointToLatLng([16, topInsetPx]),
+    map.containerPointToLatLng([16, top]),
     map.containerPointToLatLng([size.x - 56, size.y - 16]),
   )
 }
@@ -205,7 +219,7 @@ function KeepInView({
       .toBounds(Math.max(target.radiusM * 2.5, 500))
       .extend(user)
     map.fitBounds(bounds, {
-      ...framePadding(topInsetPx),
+      ...framePadding(map, topInsetPx),
       animate: !reduceMotion(),
     })
   }, [map, target, topInsetPx])
@@ -229,7 +243,7 @@ function MapFocus({
     const bounds = latLng(center.lat, center.lng).toBounds(
       Math.max(radiusM * 3, 600),
     )
-    const options = framePadding(topInsetPx)
+    const options = framePadding(map, topInsetPx)
     if (reduceMotion()) map.fitBounds(bounds, options)
     else map.flyToBounds(bounds, { ...options, duration: 0.8 })
   }, [map, request, topInsetPx])

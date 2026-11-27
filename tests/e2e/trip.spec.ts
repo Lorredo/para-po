@@ -59,6 +59,7 @@ test('demo ride: the alarm rings by itself at Ayala', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Set stop: Ayala' }).click()
   await page.getByRole('button', { name: 'Start trip' }).click()
+  await page.getByRole('button', { name: 'Got it, start trip' }).click()
   await expect(page.getByText('Screen will stay on')).toBeVisible()
   expect((await wakeLockCalls(page)).requests).toBe(1)
 
@@ -123,6 +124,7 @@ test.describe('with real GPS (emulated)', () => {
 
     // Location is already allowed, so no explainer: the tap starts the trip.
     await page.getByRole('button', { name: 'Start trip' }).click()
+    await page.getByRole('button', { name: 'Got it, start trip' }).click()
     await expect(page.getByRole('button', { name: 'End trip' })).toBeVisible()
     await expect(page.locator('.para-po-user-dot')).toBeVisible()
 

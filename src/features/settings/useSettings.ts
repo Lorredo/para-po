@@ -20,5 +20,10 @@ export function useSettings(store?: KeyValueStore) {
     [],
   )
 
-  return { ...settings, setRadiusM, setRingtoneId }
+  const markIntroSeen = useCallback(
+    () => setSettings((s) => ({ ...s, introSeen: true })),
+    [],
+  )
+
+  return { ...settings, setRadiusM, setRingtoneId, markIntroSeen }
 }

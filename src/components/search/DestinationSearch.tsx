@@ -62,7 +62,7 @@ export function DestinationSearch({
   return (
     <div
       ref={rootRef}
-      className="absolute inset-x-3 top-3 z-[1000]"
+      className="pointer-events-auto relative"
       onKeyDown={(event) => {
         if (event.key === 'Escape') setOpen(false)
       }}
@@ -103,7 +103,8 @@ export function DestinationSearch({
       </p>
 
       {open && (tooShort || state.status !== 'idle') && (
-        <div className="mt-2 overflow-hidden rounded-2xl bg-white shadow-lg">
+        // Floats over whatever is below (e.g. the demo panel).
+        <div className="absolute inset-x-0 top-full z-10 mt-2 overflow-hidden rounded-2xl bg-white shadow-lg">
           {state.status === 'done' && state.places.length > 0 && !tooShort ? (
             <>
               <ul
@@ -136,7 +137,7 @@ export function DestinationSearch({
                   </li>
                 ))}
               </ul>
-              <p className="border-t border-ink/10 px-4 py-2 text-[11px] text-ink/60">
+              <p className="border-t border-ink/10 px-4 py-2 text-[11px] text-ink/70">
                 {copy.search.credit}
               </p>
             </>
