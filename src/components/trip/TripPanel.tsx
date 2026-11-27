@@ -1,10 +1,10 @@
 import { copy } from '../../content/copy'
+import type { Destination } from '../../features/trip/types'
 import { formatLatLng } from '../../lib/geo/format'
-import type { LatLng } from '../../lib/geo/types'
 import { RadiusSlider } from './RadiusSlider'
 
 type TripPanelProps = {
-  destination: LatLng | null
+  destination: Destination | null
   radiusM: number
   onRadiusChange: (meters: number) => void
   onClearDestination: () => void
@@ -24,10 +24,14 @@ export function TripPanel({
       {destination ? (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-bold text-navy">
+            <h2 className="text-xs font-semibold tracking-wide text-ink/60 uppercase">
               {copy.setup.destinationTitle}
             </h2>
+            <p className="truncate text-base font-bold text-navy">
+              {destination.name ?? copy.setup.droppedPin}
+            </p>
             <p className="text-xs text-ink/60 tabular-nums">
+              {destination.kind && <>{destination.kind} · </>}
               {formatLatLng(destination)}
             </p>
             <p className="mt-1 text-sm text-ink/80">

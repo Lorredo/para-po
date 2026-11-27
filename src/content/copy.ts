@@ -9,11 +9,29 @@ export const copy = {
     label: 'Map. Tap to set your stop.',
     destinationMarker: 'Your stop',
   },
+  search: {
+    label: 'Search for your stop',
+    placeholder: 'Station or landmark, e.g. Cubao',
+    submit: 'Search',
+    searching: 'Searching…',
+    tooShort: 'Type at least 3 letters.',
+    noResults:
+      'No places found. Try a station or landmark name, like "Ayala Station", or tap the map.',
+    resultsFound: (count: number) =>
+      count === 1 ? '1 place found' : `${count} places found`,
+    errors: {
+      'rate-limited': 'Search is busy right now. Wait a moment and try again.',
+      network: "Can't reach search. Check your connection, or tap the map.",
+      server: 'Search is having trouble right now. Tap the map instead.',
+    },
+    credit: 'Search by Nominatim · © OpenStreetMap contributors',
+  },
   setup: {
     sectionLabel: 'Trip setup',
     emptyTitle: 'Where are you getting off?',
-    emptyHint: 'Tap the map to drop a pin on your stop.',
+    emptyHint: 'Search above, or tap the map to drop a pin on your stop.',
     destinationTitle: 'Your stop',
+    droppedPin: 'Dropped pin',
     destinationHint: 'Tap the map or drag the pin to move it.',
     clear: 'Clear',
   },
