@@ -16,6 +16,15 @@ type TripPanelProps = {
   notice?: ReactNode
   /** Extra settings below the radius, e.g. the alarm sound. */
   footer?: ReactNode
+  /** The main action (Start / End trip), last, within thumb reach. */
+  actions?: ReactNode
+  /** Changing the stop is fine mid-trip; removing it isn't. */
+  clearDisabled?: boolean
+  /**
+   * During a trip, fold the radius and sound settings behind this one-line
+   * summary so the map keeps its space.
+   */
+  settingsSummary?: string | undefined
 }
 
 export function TripPanel({
@@ -27,7 +36,17 @@ export function TripPanel({
   accuracyM = null,
   notice,
   footer,
+  actions,
+  clearDisabled = false,
+  settingsSummary,
 }: TripPanelProps) {
+  const settings = (
+    <>
+      <RadiusSlider value={radiusM} onChange={onRadiusChange} />
+      {footer}
+    </>
+  )
+
   return (
     <section
       aria-label={copy.setup.sectionLabel}
@@ -71,7 +90,8 @@ export function TripPanel({
           <button
             type="button"
             onClick={onClearDestination}
-            className="shrink-0 rounded-full border border-navy/20 px-4 py-2 text-sm font-semibold text-navy hover:bg-navy/5 focus-visible:ring-2 focus-visible:ring-navy focus-visible:outline-none"
+            disabled={clearDisabled}
+            className="shrink-0 rounded-full border border-navy/20 px-4 py-2 text-sm font-semibold text-navy hover:bg-navy/5 focus-visible:ring-2 focus-visible:ring-navy focus-visible:outline-none disabled:opacity-40"
           >
             {copy.setup.clear}
           </button>
@@ -85,8 +105,17 @@ export function TripPanel({
         </div>
       )}
 
-      <RadiusSlider value={radiusM} onChange={onRadiusChange} />
-      {footer}
+      {settingsSummary ? (
+        <details className="rounded-xl border border-ink/10 px-3 py-2">
+          <summary className="cursor-pointer text-sm font-semibold text-navy">
+            {settingsSummary}
+          </summary>
+          <div className="mt-3 space-y-4">{settings}</div>
+        </details>
+      ) : (
+        settings
+      )}
+      {actions}
     </section>
   )
 }

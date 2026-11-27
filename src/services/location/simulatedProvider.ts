@@ -37,7 +37,13 @@ export type SimulatedProviderOptions = {
 
 /**
  * Replays a route as if a phone were riding it, so the whole app can be
- * tested and demoed without travelling. When the route ends, it keeps
+ * tested and demoed without travelling.
+ *
+ * Readings are stamped with *ride time*, not wall-clock time. At 10× a
+ * reading arrives every real second but is stamped 10 s after the last one,
+ * so the app sees a realistic 11 m/s rather than an impossible 110 m/s.
+ * (Without this, the geofence's glitch filter would reject the demo ride.)
+ * Seeking moves the clock on by the time the jump would take at route speed. When the route ends, it keeps
  * reporting the last point, the way a phone keeps reporting while you stand still.
  */
 export function createSimulatedProvider(
@@ -61,6 +67,8 @@ export function createSimulatedProvider(
     totalM: line.totalM,
   }
   let emit: (() => void) | null = null
+  /** Ride time in ms since epoch; never behind the real clock. */
+  let clockMs = 0
 
   function update(patch: Partial<SimState>) {
     state = { ...state, ...patch }
@@ -77,7 +85,10 @@ export function createSimulatedProvider(
     pause: () => update({ playing: false }),
     setRate: (next) => update({ rate: sanitizeRate(next) }),
     seek(progressM) {
-      update({ progressM: clamp(progressM, 0, line.totalM) })
+      const next = clamp(progressM, 0, line.totalM)
+      const travelledM = Math.abs(next - state.progressM)
+      clockMs += Math.max(1, (travelledM / route.speedMps) * 1000)
+      update({ progressM: next })
       emit?.()
     },
   }
@@ -100,16 +111,21 @@ export function createSimulatedProvider(
         listener.onFix({
           ...point,
           accuracyM,
-          timestamp: Date.now(),
-          speedMps: moving ? route.speedMps * state.rate : 0,
+          timestamp: clockMs,
+          speedMps: moving ? route.speedMps : 0,
         })
       }
 
+      clockMs = Math.max(clockMs, Date.now())
       update({ running: true })
       emit()
 
       const timer = setInterval(() => {
-        if (state.playing && state.progressM < line.totalM) {
+        const moving = state.playing && state.progressM < line.totalM
+        // Ride time runs `rate` times faster while moving; a phone standing
+        // still still reports once a second.
+        clockMs += intervalMs * (moving ? state.rate : 1)
+        if (moving) {
           const stepM = route.speedMps * state.rate * (intervalMs / 1000)
           update({ progressM: Math.min(line.totalM, state.progressM + stepM) })
         }

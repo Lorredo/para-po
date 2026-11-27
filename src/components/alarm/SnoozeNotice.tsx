@@ -3,10 +3,11 @@ import { copy } from '../../content/copy'
 
 type SnoozeNoticeProps = {
   until: number
+  /** Silences the alarm for good, e.g. "I'm getting off". */
   onTurnOff: () => void
 }
 
-/** "Snoozed. Ringing again in 42 s." with a way to cancel. */
+/** "Snoozed. Ringing again in 42 s." with a way to say you're off. */
 export function SnoozeNotice({ until, onTurnOff }: SnoozeNoticeProps) {
   const [now, setNow] = useState(() => Date.now())
 
@@ -30,7 +31,7 @@ export function SnoozeNotice({ until, onTurnOff }: SnoozeNoticeProps) {
         onClick={onTurnOff}
         className="shrink-0 rounded-lg px-3 py-1 font-semibold text-navy hover:bg-navy/5 focus-visible:ring-2 focus-visible:ring-navy focus-visible:outline-none"
       >
-        {copy.alarm.turnOff}
+        {copy.alarm.stop}
       </button>
     </div>
   )

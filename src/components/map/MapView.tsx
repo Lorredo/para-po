@@ -1,5 +1,11 @@
-import { type Marker as LeafletMarker, latLng, type PointTuple } from 'leaflet'
-import { useEffect, useMemo } from 'react'
+import {
+  type Map as LeafletMap,
+  type Marker as LeafletMarker,
+  latLng,
+  latLngBounds,
+  type PointTuple,
+} from 'leaflet'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   Circle,
   MapContainer,
@@ -30,6 +36,13 @@ export type MapFocusRequest = {
   radiusM: number
 }
 
+/** During a trip: keep the rider and their stop on screen. */
+export type FollowTarget = {
+  user: LatLng
+  stop: LatLng
+  radiusM: number
+}
+
 type MapViewProps = {
   destination: LatLng | null
   radiusM: number
@@ -38,6 +51,12 @@ type MapViewProps = {
   userFix: LocationFix | null
   locateStatus: TrackingStatus
   onLocate: () => void
+  /** Null when not following (no trip, or the user panned away). */
+  follow?: FollowTarget | null
+  /** The user dragged the map: stop following until they tap locate. */
+  onUserPan?: () => void
+  /** Height of whatever floats over the top of the map (search, demo panel). */
+  topInsetPx?: number
 }
 
 const RADIUS_STYLE = {
@@ -56,6 +75,9 @@ export function MapView({
   userFix,
   locateStatus,
   onLocate,
+  follow = null,
+  onUserPan,
+  topInsetPx = 80,
 }: MapViewProps) {
   return (
     <MapContainer
@@ -76,8 +98,10 @@ export function MapView({
       <MapControl position="bottomright">
         <LocateButton status={locateStatus} onClick={onLocate} />
       </MapControl>
-      <TapToPick onPick={onDestinationChange} />
-      <MapFocus request={focus} />
+      <FitContainer />
+      <TapToPick onPick={onDestinationChange} onPan={onUserPan} />
+      <MapFocus request={focus} topInsetPx={topInsetPx} />
+      <KeepInView target={follow} topInsetPx={topInsetPx} />
       {destination && (
         <>
           <Circle
@@ -97,17 +121,106 @@ export function MapView({
   )
 }
 
-function TapToPick({ onPick }: { onPick: (next: LatLng) => void }) {
+function TapToPick({
+  onPick,
+  onPan,
+}: {
+  onPick: (next: LatLng) => void
+  onPan?: (() => void) | undefined
+}) {
   useMapEvents({
     click(event) {
       onPick({ lat: event.latlng.lat, lng: event.latlng.lng })
+    },
+    dragstart() {
+      onPan?.()
     },
   })
   return null
 }
 
+/**
+ * Leaflet measures its container once. When the trip panel grows or shrinks,
+ * the map's box changes size; tell Leaflet so it fills the new space instead
+ * of leaving a grey band.
+ */
+function FitContainer() {
+  const map = useMap()
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => map.invalidateSize())
+    observer.observe(map.getContainer())
+    return () => observer.disconnect()
+  }, [map])
+  return null
+}
+
+const reduceMotion = () =>
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+
+/** Padding that keeps framed things clear of the overlays on the map. */
+function framePadding(topInsetPx: number) {
+  return {
+    paddingTopLeft: [16, topInsetPx] as PointTuple,
+    paddingBottomRight: [56, 16] as PointTuple, // room for the map buttons
+    maxZoom: 17,
+  }
+}
+
+/** The part of the map not hidden behind the search bar or buttons. */
+function visibleBounds(map: LeafletMap, topInsetPx: number) {
+  const size = map.getSize()
+  return latLngBounds(
+    map.containerPointToLatLng([16, topInsetPx]),
+    map.containerPointToLatLng([size.x - 56, size.y - 16]),
+  )
+}
+
+/**
+ * Follow mode: when the rider would leave the visible map, re-frame so both
+ * they and their stop are on screen. It frames once when following starts,
+ * then only moves when needed, so the map isn't constantly sliding.
+ */
+function KeepInView({
+  target,
+  topInsetPx,
+}: {
+  target: FollowTarget | null
+  topInsetPx: number
+}) {
+  const map = useMap()
+  const framedRef = useRef(false)
+
+  useEffect(() => {
+    if (!target) {
+      framedRef.current = false
+      return
+    }
+    const user = latLng(target.user.lat, target.user.lng)
+    if (framedRef.current && visibleBounds(map, topInsetPx).contains(user)) {
+      return
+    }
+    framedRef.current = true
+    const bounds = latLng(target.stop.lat, target.stop.lng)
+      .toBounds(Math.max(target.radiusM * 2.5, 500))
+      .extend(user)
+    map.fitBounds(bounds, {
+      ...framePadding(topInsetPx),
+      animate: !reduceMotion(),
+    })
+  }, [map, target, topInsetPx])
+
+  return null
+}
+
 /** Frames the stop and its alert circle, leaving room for the search bar. */
-function MapFocus({ request }: { request: MapFocusRequest | null }) {
+function MapFocus({
+  request,
+  topInsetPx,
+}: {
+  request: MapFocusRequest | null
+  topInsetPx: number
+}) {
   const map = useMap()
 
   useEffect(() => {
@@ -116,17 +229,10 @@ function MapFocus({ request }: { request: MapFocusRequest | null }) {
     const bounds = latLng(center.lat, center.lng).toBounds(
       Math.max(radiusM * 3, 600),
     )
-    const options = {
-      paddingTopLeft: [16, 80] as PointTuple,
-      paddingBottomRight: [16, 16] as PointTuple,
-      maxZoom: 17,
-    }
-    const reduceMotion = window.matchMedia?.(
-      '(prefers-reduced-motion: reduce)',
-    ).matches
-    if (reduceMotion) map.fitBounds(bounds, options)
+    const options = framePadding(topInsetPx)
+    if (reduceMotion()) map.fitBounds(bounds, options)
     else map.flyToBounds(bounds, { ...options, duration: 0.8 })
-  }, [map, request])
+  }, [map, request, topInsetPx])
 
   return null
 }

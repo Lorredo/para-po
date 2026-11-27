@@ -98,6 +98,39 @@ describe('createSimulatedProvider', () => {
     expect(offset).toBeLessThanOrEqual(Math.SQRT2 * 5 + 0.01)
   })
 
+  it('stamps readings with ride time, so 10× looks like real speed', () => {
+    vi.setSystemTime(1_764_000_000_000)
+    const { fixes } = ride({ rate: 10 })
+    vi.advanceTimersByTime(3000)
+    const [a, b] = fixes.slice(-2)
+    const seconds = (b!.timestamp - a!.timestamp) / 1000
+    expect(seconds).toBe(10)
+    expect(haversineM(a!, b!) / seconds).toBeCloseTo(10, 0) // the route's 10 m/s
+    expect(b!.speedMps).toBe(10)
+  })
+
+  it('advances ride time when seeking, so a jump reads as travel', () => {
+    const { fixes, sim } = ride()
+    sim.seek(500)
+    const [a, b] = fixes.slice(-2)
+    // 500 m at the route's 10 m/s takes 50 s.
+    expect((b!.timestamp - a!.timestamp) / 1000).toBeCloseTo(50, 3)
+  })
+
+  it('keeps ride time moving (1 s per reading) while paused', () => {
+    const { fixes, sim } = ride({ rate: 50 })
+    sim.pause()
+    vi.advanceTimersByTime(2000)
+    const [a, b] = fixes.slice(-2)
+    expect(b!.timestamp - a!.timestamp).toBe(1000)
+  })
+
+  it('never stamps readings behind the real clock', () => {
+    vi.setSystemTime(1_764_000_000_000)
+    const { fixes } = ride()
+    expect(fixes[0]!.timestamp).toBeGreaterThanOrEqual(1_764_000_000_000)
+  })
+
   it('notifies subscribers on changes', () => {
     const { sim } = ride()
     const onChange = vi.fn()

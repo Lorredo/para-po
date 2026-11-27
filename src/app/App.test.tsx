@@ -1,12 +1,16 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MapFocusRequest } from '../components/map/MapView'
 import { copy } from '../content/copy'
+import { offsetM } from '../lib/geo/distance'
 import type { LatLng } from '../lib/geo/types'
 import { selectLocationSource } from '../services/location/selectSource'
 import type { LocationFix } from '../services/location/types'
+import { SETTINGS_KEY } from '../services/settings'
+import { createMemoryStore } from '../services/storage'
 import { createFakeAudio, createFakeVibration } from '../test/fakeAlarm'
 import { createFakeProvider } from '../test/fakeLocationProvider'
+import { createFakeWakeLock } from '../test/fakeWakeLock'
 import App from './App'
 
 // Leaflet needs real layout, so the map itself is covered by Playwright.
@@ -49,6 +53,8 @@ vi.mock('../components/map/MapView', () => ({
 }))
 
 const AYALA = { lat: 14.5492, lng: 121.0279 }
+/** Where the stub map's "tap map" button drops the pin. */
+const TAPPED = { lat: 14.6537, lng: 121.0328 }
 const BUENDIA = { lat: 14.5543, lng: 121.0345 }
 
 function renderApp() {
@@ -58,6 +64,8 @@ function renderApp() {
       locationSource={{ provider: fake.provider }}
       audio={createFakeAudio().audio}
       vibration={createFakeVibration()}
+      wakeLock={createFakeWakeLock()}
+      settingsStore={createMemoryStore()}
     />,
   )
   return fake
@@ -282,6 +290,8 @@ describe('App', () => {
             locationSource={selectLocationSource('?sim')}
             audio={createFakeAudio().audio}
             vibration={createFakeVibration()}
+            wakeLock={createFakeWakeLock()}
+            settingsStore={createMemoryStore()}
           />,
         )
         fireEvent.click(
@@ -289,7 +299,7 @@ describe('App', () => {
         )
         expect(within(panel()).getByText('Ayala')).toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole('button', { name: copy.sim.start }))
+        fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
         expect(screen.queryByRole('dialog')).toBeNull()
         expect(map().dataset.user).not.toBe('')
         // North Avenue to Ayala is roughly 12 km by straight line.
@@ -311,6 +321,8 @@ describe('App', () => {
           locationSource={{ provider: createFakeProvider().provider }}
           audio={audio}
           vibration={vibration}
+          wakeLock={createFakeWakeLock()}
+          settingsStore={createMemoryStore()}
         />,
       )
 
@@ -343,6 +355,8 @@ describe('App', () => {
           locationSource={{ provider: createFakeProvider().provider }}
           audio={audio}
           vibration={createFakeVibration()}
+          wakeLock={createFakeWakeLock()}
+          settingsStore={createMemoryStore()}
         />,
       )
       fireEvent.change(
@@ -372,12 +386,14 @@ describe('App', () => {
             locationSource={selectLocationSource('?sim')}
             audio={createFakeAudio().audio}
             vibration={createFakeVibration()}
+            wakeLock={createFakeWakeLock()}
+            settingsStore={createMemoryStore()}
           />,
         )
         fireEvent.click(
           screen.getByRole('button', { name: copy.sim.useStop('Ayala') }),
         )
-        fireEvent.click(screen.getByRole('button', { name: copy.sim.start }))
+        fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
         fireEvent.click(screen.getByRole('button', { name: copy.sound.test }))
         // The demo ride starts at North Avenue, about 12 km from Ayala.
         expect(
@@ -388,6 +404,224 @@ describe('App', () => {
       } finally {
         vi.useRealTimers()
       }
+    })
+  })
+
+  describe('trip', () => {
+    /** Everything the trip touches, faked, with its own settings store. */
+    function renderTrip({
+      wakeLockResult = 'active' as const,
+      settingsStore = createMemoryStore(),
+    }: {
+      wakeLockResult?: 'active' | 'unsupported'
+      settingsStore?: ReturnType<typeof createMemoryStore>
+    } = {}) {
+      const gps = createFakeProvider()
+      const { audio } = createFakeAudio()
+      const vibration = createFakeVibration()
+      const wakeLock = createFakeWakeLock(wakeLockResult)
+      const view = render(
+        <App
+          locationSource={{ provider: gps.provider }}
+          audio={audio}
+          vibration={vibration}
+          wakeLock={wakeLock}
+          settingsStore={settingsStore}
+        />,
+      )
+      let t = Date.now()
+      /** A GPS reading `northM` m north of the tapped stop, `gapS` after the last. */
+      const ride = (northM: number, gapS = 10) => {
+        t += gapS * 1000
+        gps.emit(offsetM(TAPPED, northM, 0), { timestamp: t, accuracyM: 10 })
+      }
+      const setStop = () =>
+        fireEvent.click(screen.getByRole('button', { name: 'tap map' }))
+      const startTrip = () => {
+        fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
+        const allow = screen.queryByRole('button', {
+          name: copy.location.explainer.allow,
+        })
+        if (allow) fireEvent.click(allow)
+      }
+      return {
+        gps,
+        audio,
+        vibration,
+        wakeLock,
+        settingsStore,
+        ride,
+        setStop,
+        startTrip,
+        ...view,
+      }
+    }
+
+    it('needs a stop before it can start', () => {
+      renderTrip()
+      expect(
+        screen.getByRole('button', { name: copy.trip.start }),
+      ).toBeDisabled()
+      expect(screen.getByText(copy.trip.needStop)).toBeInTheDocument()
+    })
+
+    it('one tap unlocks sound, keeps the screen on and starts GPS', () => {
+      const { gps, audio, wakeLock, setStop } = renderTrip()
+      setStop()
+      fireEvent.click(screen.getByRole('button', { name: copy.trip.start }))
+
+      // Location isn't allowed yet, so it explains first; "Allow" is the tap.
+      fireEvent.click(
+        screen.getByRole('button', { name: copy.location.explainer.allow }),
+      )
+      expect(audio.unlock).toHaveBeenCalled()
+      expect(wakeLock.request).toHaveBeenCalled()
+      expect(gps.provider.start).toHaveBeenCalled()
+      expect(screen.getByText(copy.trip.screenOn)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: copy.trip.end })).toBeVisible()
+      expect(
+        screen.getByRole('button', { name: copy.setup.clear }),
+      ).toBeDisabled()
+    })
+
+    it('rings by itself on arrival, and "I\'m getting off" ends the trip', () => {
+      const { gps, audio, vibration, wakeLock, ride, setStop, startTrip } =
+        renderTrip()
+      setStop()
+      startTrip()
+      for (const n of [900, 800, 700, 600, 500, 400]) ride(n)
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+
+      ride(290)
+      ride(280)
+      const dialog = screen.getByRole('alertdialog', { name: 'Para po!' })
+      expect(dialog).toHaveAccessibleDescription(copy.alarm.body.arrived)
+      expect(audio.play).toHaveBeenLastCalledWith('jeepney', {
+        loop: true,
+        crescendo: true,
+      })
+      expect(vibration.start).toHaveBeenCalled()
+
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: copy.alarm.stop }),
+      )
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+      expect(screen.getByText(copy.trip.ended.title)).toBeInTheDocument()
+      expect(audio.stop).toHaveBeenCalled()
+      expect(wakeLock.release).toHaveBeenCalled()
+      expect(gps.running).toBe(false)
+
+      fireEvent.click(
+        screen.getByRole('button', { name: copy.trip.ended.done }),
+      )
+      expect(screen.queryByText(copy.trip.ended.title)).toBeNull()
+      expect(
+        screen.getByRole('heading', { name: copy.setup.emptyTitle }),
+      ).toBeInTheDocument()
+    })
+
+    it('says so honestly when the stop was passed between readings', () => {
+      const { ride, setStop, startTrip } = renderTrip()
+      setStop()
+      startTrip()
+      // A train with readings 30 s apart (25–37 m/s): none lands inside.
+      for (const n of [2250, 1500, 750, -350, -1100]) ride(n, 30)
+      expect(screen.getByRole('alertdialog')).toHaveAccessibleDescription(
+        copy.alarm.body.passed,
+      )
+    })
+
+    it('snooze rings again while the trip is on, but not after it ends', () => {
+      vi.useFakeTimers()
+      try {
+        const { audio, ride, setStop, startTrip } = renderTrip()
+        setStop()
+        startTrip()
+        for (const n of [900, 290, 280]) ride(n)
+        fireEvent.click(screen.getByRole('button', { name: copy.alarm.snooze }))
+        expect(screen.queryByRole('alertdialog')).toBeNull()
+        expect(
+          screen.getByText(/^Snoozed\. Ringing again in 60 s\.$/),
+        ).toBeVisible()
+
+        act(() => vi.advanceTimersByTime(60_000))
+        expect(screen.getByRole('alertdialog')).toBeVisible()
+        expect(audio.play).toHaveBeenCalledTimes(2)
+
+        // Snooze again, then end the trip: it must stay quiet.
+        fireEvent.click(screen.getByRole('button', { name: copy.alarm.snooze }))
+        fireEvent.click(screen.getByRole('button', { name: copy.trip.end }))
+        act(() => vi.advanceTimersByTime(120_000))
+        expect(screen.queryByRole('alertdialog')).toBeNull()
+        expect(audio.play).toHaveBeenCalledTimes(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('"End trip" stops everything without the "Safe travels" screen', () => {
+      const { gps, wakeLock, setStop, startTrip } = renderTrip()
+      setStop()
+      startTrip()
+      fireEvent.click(screen.getByRole('button', { name: copy.trip.end }))
+      expect(gps.running).toBe(false)
+      expect(wakeLock.release).toHaveBeenCalled()
+      expect(screen.queryByText(copy.trip.ended.title)).toBeNull()
+      expect(
+        screen.getByRole('button', { name: copy.trip.start }),
+      ).toBeEnabled()
+    })
+
+    it('warns when the screen cannot be kept on', async () => {
+      const { setStop, startTrip } = renderTrip({
+        wakeLockResult: 'unsupported',
+      })
+      setStop()
+      startTrip()
+      expect(
+        await screen.findByText(copy.trip.wakeLockUnavailable),
+      ).toBeInTheDocument()
+    })
+
+    it('tells you when the trip starts at the stop', () => {
+      const { ride, setStop, startTrip } = renderTrip()
+      setStop()
+      startTrip()
+      ride(50)
+      expect(
+        screen.getByText(copy.trip.startedNear(copy.trip.yourStop)),
+      ).toBeInTheDocument()
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+    })
+
+    it('remembers the radius and ringtone for next time', () => {
+      const settingsStore = createMemoryStore()
+      const first = renderTrip({ settingsStore })
+      fireEvent.change(
+        screen.getByRole('slider', { name: copy.radius.label }),
+        {
+          target: { value: '650' },
+        },
+      )
+      fireEvent.change(
+        screen.getByRole('combobox', { name: copy.sound.label }),
+        {
+          target: { value: 'bell' },
+        },
+      )
+      expect(settingsStore.read(SETTINGS_KEY)).toEqual({
+        radiusM: 650,
+        ringtoneId: 'bell',
+      })
+      first.unmount()
+
+      renderTrip({ settingsStore })
+      expect(
+        screen.getByRole('slider', { name: copy.radius.label }),
+      ).toHaveValue('650')
+      expect(
+        screen.getByRole('combobox', { name: copy.sound.label }),
+      ).toHaveValue('bell')
     })
   })
 })

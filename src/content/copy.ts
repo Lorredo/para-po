@@ -70,13 +70,35 @@ export const copy = {
   sim: {
     label: 'Simulated ride controls',
     badge: 'Demo ride',
-    start: 'Start demo ride',
+    startHint: 'Set the stop, then tap Start trip below.',
     play: 'Play',
     pause: 'Pause',
     speed: 'Playback speed',
     progress: 'Ride progress',
     progressText: (done: string, total: string) => `${done} of ${total}`,
     useStop: (name: string) => `Set stop: ${name}`,
+  },
+  trip: {
+    start: 'Start trip',
+    needStop: 'Set your stop first: search above or tap the map.',
+    end: 'End trip',
+    yourStop: 'your stop',
+    settingsSummary: (radius: string, sound: string) =>
+      `Alarm settings · ${radius} · ${sound}`,
+    screenOn: 'Screen will stay on. Keep Para Po open until your stop.',
+    wakeLockUnavailable:
+      "This browser can't keep your screen on. Keep Para Po open and turn off auto-lock, or the alarm may not ring.",
+    startedNear: (name: string) =>
+      `You're already near ${name}. Para Po will ring after you move away and come back.`,
+    gpsStale:
+      'No GPS update for 30 seconds, so the distance may be out of date.',
+    poorAccuracy: (meters: number) =>
+      `GPS accuracy is poor (±${meters} m). Waiting for a better reading.`,
+    ended: {
+      title: 'Ingat! Safe travels.',
+      body: 'Trip finished.',
+      done: 'Plan another trip',
+    },
   },
   radius: {
     label: 'Alert me within',
@@ -109,6 +131,5 @@ export const copy = {
     done: 'Done',
     snooze: 'Snooze 1 min',
     snoozed: (seconds: number) => `Snoozed. Ringing again in ${seconds} s.`,
-    turnOff: 'Turn off',
   },
 } as const

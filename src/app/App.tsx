@@ -1,36 +1,55 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { AlarmOverlay } from '../components/alarm/AlarmOverlay'
 import { SnoozeNotice } from '../components/alarm/SnoozeNotice'
 import { Logo } from '../components/brand/Logo'
-import { type MapFocusRequest, MapView } from '../components/map/MapView'
+import {
+  type FollowTarget,
+  type MapFocusRequest,
+  MapView,
+} from '../components/map/MapView'
 import { DestinationSearch } from '../components/search/DestinationSearch'
 import { SimPanel } from '../components/sim/SimPanel'
 import { LocationExplainer } from '../components/system/LocationExplainer'
 import { LocationNotice } from '../components/system/LocationNotice'
 import { SoundSettings } from '../components/trip/SoundSettings'
+import { TripControls } from '../components/trip/TripControls'
+import { TripEndedCard } from '../components/trip/TripEndedCard'
+import { TripNotices } from '../components/trip/TripNotices'
 import { TripPanel } from '../components/trip/TripPanel'
-import { RADIUS_DEFAULT_M } from '../config/trip'
 import { copy } from '../content/copy'
 import { useAlarm } from '../features/alarm/useAlarm'
 import { useGeolocationPermission } from '../features/location/useGeolocationPermission'
 import { useLocationTracking } from '../features/location/useLocationTracking'
+import { useSettings } from '../features/settings/useSettings'
 import type { Destination } from '../features/trip/types'
+import { useTrip } from '../features/trip/useTrip'
 import { haversineM } from '../lib/geo/distance'
+import { formatDistance } from '../lib/geo/format'
 import type { LatLng } from '../lib/geo/types'
 import {
   type AlarmAudio,
   alarmAudio as defaultAlarmAudio,
 } from '../services/audio/alarmAudio'
-import { DEFAULT_RINGTONE, type RingtoneId } from '../services/audio/ringtones'
 import type { Place } from '../services/geocoding'
 import {
   type LocationSource,
   selectLocationSource,
 } from '../services/location/selectSource'
+import type { KeyValueStore } from '../services/storage'
 import {
   vibration as defaultVibration,
   type Vibration,
 } from '../services/vibration'
+import {
+  type ScreenWakeLock,
+  screenWakeLock as defaultWakeLock,
+} from '../services/wakeLock'
 
 /** Frames about 900 m around the user: street level, with some context. */
 const USER_FOCUS_RADIUS_M = 300
@@ -38,37 +57,48 @@ const USER_FOCUS_RADIUS_M = 300
 type AppProps = {
   /** Injected in tests; defaults to real GPS, or a demo ride with ?sim. */
   locationSource?: LocationSource
-  /** Injected in tests; default to Web Audio and navigator.vibrate. */
+  /** Injected in tests; default to the real browser APIs. */
   audio?: AlarmAudio
   vibration?: Vibration
+  wakeLock?: ScreenWakeLock
+  settingsStore?: KeyValueStore
 }
 
 export default function App({
   locationSource,
   audio = defaultAlarmAudio,
   vibration = defaultVibration,
+  wakeLock = defaultWakeLock,
+  settingsStore,
 }: AppProps) {
   const [source] = useState<LocationSource>(
     () => locationSource ?? selectLocationSource(window.location.search),
   )
   const isSim = source.sim !== undefined
 
+  const settings = useSettings(settingsStore)
+  const { radiusM, ringtoneId } = settings
   const [destination, setDestination] = useState<Destination | null>(null)
-  const [radiusM, setRadiusM] = useState(RADIUS_DEFAULT_M)
   const [focus, setFocus] = useState<MapFocusRequest | null>(null)
-  const [explainerOpen, setExplainerOpen] = useState(false)
-  const [ringtoneId, setRingtoneId] = useState<RingtoneId>(DEFAULT_RINGTONE)
-
-  const alarm = useAlarm({ audio, vibration, ringtoneId })
-  const handleTestAlarm = useCallback(() => {
-    // Unlock inside this tap so the browser lets the sound play.
-    void audio.unlock()
-    alarm.ring('test')
-  }, [audio, alarm])
+  const [explainerFor, setExplainerFor] = useState<'locate' | 'trip' | null>(
+    null,
+  )
+  /** Follow mode during a trip; off once the user pans, on again via locate. */
+  const [following, setFollowing] = useState(true)
 
   const location = useLocationTracking(source.provider)
   const permission = useGeolocationPermission(!isSim)
-  const { fix, start: startLocation } = location
+  const { fix, start: startLocation, stop: stopLocation } = location
+  const wakeStatus = useSyncExternalStore(
+    wakeLock.subscribe,
+    wakeLock.getStatus,
+  )
+
+  // The alarm and the trip need each other: the trip rings the alarm, and a
+  // snoozed alarm only rings again while the trip is still on.
+  const tripActiveRef = useRef<() => boolean>(() => false)
+  const shouldRingAgain = useCallback(() => tripActiveRef.current(), [])
+  const alarm = useAlarm({ audio, vibration, ringtoneId, shouldRingAgain })
 
   // Centre on the user once per tracking session, on the first fix.
   const centeredRef = useRef(false)
@@ -86,7 +116,26 @@ export default function App({
     startLocation()
   }, [startLocation])
 
+  const trip = useTrip({
+    destination,
+    radiusM,
+    fix,
+    startLocation,
+    stopLocation,
+    audio,
+    wakeLock,
+    onAlarm: alarm.ring,
+  })
+  useEffect(() => {
+    tripActiveRef.current = trip.isActive
+  }, [trip.isActive])
+
+  /** Explain before the browser asks for location, unless it already decided. */
+  const needsExplainer =
+    !isSim && permission !== 'granted' && permission !== 'denied'
+
   const handleLocate = useCallback(() => {
+    setFollowing(true)
     if (fix) {
       setFocus({
         center: { lat: fix.lat, lng: fix.lng },
@@ -95,14 +144,33 @@ export default function App({
       return
     }
     if (location.status === 'locating') return
-    // Explain first when the browser is about to ask. If it already decided,
-    // start straight away: denied shows the "blocked" help.
-    if (isSim || permission === 'granted' || permission === 'denied') {
-      startTracking()
-    } else {
-      setExplainerOpen(true)
-    }
-  }, [fix, isSim, location.status, permission, startTracking])
+    if (needsExplainer) setExplainerFor('locate')
+    else startTracking()
+  }, [fix, location.status, needsExplainer, startTracking])
+
+  const handleStartTrip = useCallback(() => {
+    setFollowing(true)
+    // Skip the explainer if location is already running.
+    if (needsExplainer && location.status === 'off') setExplainerFor('trip')
+    else trip.start()
+  }, [needsExplainer, location.status, trip])
+
+  const handleEndTrip = useCallback(() => {
+    alarm.stop()
+    trip.end()
+  }, [alarm, trip])
+
+  /** "I'm getting off": silence the alarm and finish the trip. */
+  const handleGettingOff = useCallback(() => {
+    alarm.stop()
+    trip.finish()
+  }, [alarm, trip])
+
+  const handleTestAlarm = useCallback(() => {
+    // Unlock inside this tap so the browser lets the sound play.
+    void audio.unlock()
+    alarm.ring('test')
+  }, [audio, alarm])
 
   // A tapped or dragged pin is no longer the named place from search.
   const handleMapPick = useCallback((point: LatLng) => {
@@ -128,7 +196,17 @@ export default function App({
 
   const clearDestination = useCallback(() => setDestination(null), [])
 
+  const handlePlanAnother = useCallback(() => {
+    trip.dismiss()
+    setDestination(null)
+  }, [trip])
+
   const distanceM = destination && fix ? haversineM(fix, destination) : null
+  const follow: FollowTarget | null =
+    trip.phase === 'active' && following && fix && destination
+      ? { user: fix, stop: destination, radiusM }
+      : null
+  const ringing = alarm.state.status === 'ringing' ? alarm.state : null
 
   return (
     <div className="flex h-full flex-col">
@@ -149,13 +227,15 @@ export default function App({
           userFix={fix}
           locateStatus={location.status}
           onLocate={handleLocate}
+          follow={follow}
+          onUserPan={() => setFollowing(false)}
+          topInsetPx={isSim ? 210 : 80}
         />
         <DestinationSearch onPick={handleSearchPick} />
         {source.sim && (
           <SimPanel
             controller={source.sim.controller}
             suggestedStop={source.sim.route.suggestedStop}
-            onStart={startTracking}
             onUseStop={handleUseSimStop}
           />
         )}
@@ -164,14 +244,39 @@ export default function App({
       <TripPanel
         destination={destination}
         radiusM={radiusM}
-        onRadiusChange={setRadiusM}
+        onRadiusChange={settings.setRadiusM}
         onClearDestination={clearDestination}
+        clearDisabled={trip.phase === 'active'}
+        settingsSummary={
+          trip.phase === 'active'
+            ? copy.trip.settingsSummary(
+                formatDistance(radiusM),
+                copy.sound.ringtones[ringtoneId],
+              )
+            : undefined
+        }
         distanceM={distanceM}
         accuracyM={fix?.accuracyM ?? null}
         notice={
           <>
+            {trip.phase === 'ended' && (
+              <TripEndedCard onDone={handlePlanAnother} />
+            )}
             {alarm.state.status === 'snoozed' && (
-              <SnoozeNotice until={alarm.state.until} onTurnOff={alarm.stop} />
+              <SnoozeNotice
+                until={alarm.state.until}
+                onTurnOff={handleGettingOff}
+              />
+            )}
+            {trip.phase === 'active' && (
+              <TripNotices
+                wakeLock={wakeStatus}
+                startedNear={trip.startedNear}
+                stopName={destination?.name}
+                gpsStale={trip.gpsStale}
+                rejectReason={trip.result?.rejectReason}
+                accuracyM={fix?.accuracyM ?? null}
+              />
             )}
             <LocationNotice
               status={location.status}
@@ -184,29 +289,40 @@ export default function App({
           <SoundSettings
             audio={audio}
             ringtoneId={ringtoneId}
-            onRingtoneChange={setRingtoneId}
+            onRingtoneChange={settings.setRingtoneId}
             onTestAlarm={handleTestAlarm}
+          />
+        }
+        actions={
+          <TripControls
+            phase={trip.phase}
+            canStart={destination !== null}
+            onStart={handleStartTrip}
+            onEnd={handleEndTrip}
           />
         }
       />
 
-      {alarm.state.status === 'ringing' && (
+      {ringing && (
         <AlarmOverlay
-          reason={alarm.state.reason}
+          reason={ringing.reason}
           stopName={destination?.name}
           distanceM={distanceM}
-          onStop={alarm.stop}
-          onSnooze={alarm.state.reason === 'test' ? undefined : alarm.snooze}
+          onStop={ringing.reason === 'test' ? alarm.stop : handleGettingOff}
+          onSnooze={ringing.reason === 'test' ? undefined : alarm.snooze}
         />
       )}
 
-      {explainerOpen && (
+      {explainerFor && (
         <LocationExplainer
           onAllow={() => {
-            setExplainerOpen(false)
-            startTracking()
+            const intent = explainerFor
+            setExplainerFor(null)
+            // Still inside the tap, so the trip can unlock sound.
+            if (intent === 'trip') trip.start()
+            else startTracking()
           }}
-          onCancel={() => setExplainerOpen(false)}
+          onCancel={() => setExplainerFor(null)}
         />
       )}
     </div>

@@ -59,7 +59,9 @@ test('search, pick a result, and the map flies to the stop', async ({
     .poll(async () => (await circle.boundingBox())?.width ?? 0)
     .toBeGreaterThan(80)
 
-  // Once the flight settles, the pin is horizontally centred on the map.
+  // Once the flight settles, the pin is centred in the *visible* part of the
+  // map: 16 px in from the left edge, and clear of the 56 px button column
+  // on the right.
   const pin = page.locator('.para-po-pin')
   const map = page.locator('.leaflet-container')
   await expect
@@ -69,11 +71,10 @@ test('search, pick a result, and the map flies to the stop', async ({
         pin.boundingBox(),
       ])
       if (!mapBox || !pinBox) return Infinity
-      return Math.abs(
-        pinBox.x + pinBox.width / 2 - (mapBox.x + mapBox.width / 2),
-      )
+      const visibleCentreX = mapBox.x + (16 + (mapBox.width - 56)) / 2
+      return Math.abs(pinBox.x + pinBox.width / 2 - visibleCentreX)
     })
-    .toBeLessThan(20)
+    .toBeLessThan(8)
 
   expect(requests).toHaveLength(1)
   const url = new URL(requests[0]!)

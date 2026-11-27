@@ -9,7 +9,6 @@ const RATES = [1, 10, 50] as const
 type SimPanelProps = {
   controller: SimController
   suggestedStop: Destination
-  onStart: () => void
   onUseStop: (stop: Destination) => void
 }
 
@@ -17,7 +16,6 @@ type SimPanelProps = {
 export function SimPanel({
   controller,
   suggestedStop,
-  onStart,
   onUseStop,
 }: SimPanelProps) {
   const state = useSyncExternalStore(controller.subscribe, controller.getState)
@@ -47,13 +45,7 @@ export function SimPanel({
       </div>
 
       {!state.running ? (
-        <button
-          type="button"
-          onClick={onStart}
-          className="w-full rounded-xl bg-jeep-yellow px-4 py-2 text-sm font-bold text-navy focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
-        >
-          {copy.sim.start}
-        </button>
+        <p className="text-sm text-white/85">{copy.sim.startHint}</p>
       ) : (
         <>
           <div className="flex items-center gap-2">

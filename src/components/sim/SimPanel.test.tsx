@@ -15,38 +15,44 @@ afterEach(() => {
 function setup() {
   const provider = createSimulatedProvider(DEFAULT_SIM_ROUTE, { jitterM: 0 })
   const onUseStop = vi.fn()
-  const onStart = vi.fn(() => {
-    provider.start({ onFix: () => {}, onError: () => {} })
-  })
   render(
     <SimPanel
       controller={provider.controller}
       suggestedStop={DEFAULT_SIM_ROUTE.suggestedStop}
-      onStart={onStart}
       onUseStop={onUseStop}
     />,
   )
-  return { controller: provider.controller, onStart, onUseStop }
+  // In the app, "Start trip" starts the provider.
+  const startRide = () =>
+    act(() => {
+      provider.start({ onFix: () => {}, onError: () => {} })
+    })
+  return { controller: provider.controller, onUseStop, startRide }
 }
 
 describe('SimPanel', () => {
-  it('starts the ride and offers the suggested stop', () => {
-    const { onStart, onUseStop } = setup()
+  it('offers the suggested stop and explains how to start', () => {
+    const { onUseStop } = setup()
     fireEvent.click(
       screen.getByRole('button', { name: copy.sim.useStop('Ayala') }),
     )
     expect(onUseStop).toHaveBeenCalledWith(DEFAULT_SIM_ROUTE.suggestedStop)
+    expect(screen.getByText(copy.sim.startHint)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: copy.sim.pause })).toBeNull()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: copy.sim.start }))
-    expect(onStart).toHaveBeenCalled()
+  it('shows ride controls once the ride is running', () => {
+    const { startRide } = setup()
+    startRide()
+    expect(screen.queryByText(copy.sim.startHint)).toBeNull()
     expect(
       screen.getByRole('button', { name: copy.sim.pause }),
     ).toBeInTheDocument()
   })
 
   it('controls playback speed, pause and progress', () => {
-    const { controller } = setup()
-    fireEvent.click(screen.getByRole('button', { name: copy.sim.start }))
+    const { controller, startRide } = setup()
+    startRide()
 
     fireEvent.click(screen.getByRole('button', { name: '10×' }))
     expect(controller.getState().rate).toBe(10)
