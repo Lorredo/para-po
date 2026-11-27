@@ -20,6 +20,8 @@ import { InstallButton } from '../components/pwa/InstallButton'
 import { PwaNotices } from '../components/pwa/PwaNotices'
 import { LocationExplainer } from '../components/system/LocationExplainer'
 import { LocationNotice } from '../components/system/LocationNotice'
+import { RecordToggle } from '../components/trip/RecordToggle'
+import { RideLogCard } from '../components/trip/RideLogCard'
 import { SoundSettings } from '../components/trip/SoundSettings'
 import { TripControls } from '../components/trip/TripControls'
 import { ReturnNotice } from '../components/trip/ReturnNotice'
@@ -41,6 +43,10 @@ import { useSettings } from '../features/settings/useSettings'
 import type { Destination } from '../features/trip/types'
 import { useDistanceAnnouncer } from '../features/trip/announcements'
 import { useBackgroundReturn } from '../features/trip/useBackgroundReturn'
+import {
+  rideLogFilename,
+  useRideRecorder,
+} from '../features/trip/useRideRecorder'
 import { useTrip } from '../features/trip/useTrip'
 import { haversineM } from '../lib/geo/distance'
 import { formatDistance } from '../lib/geo/format'
@@ -54,6 +60,7 @@ import {
   type LocationSource,
   selectLocationSource,
 } from '../services/location/selectSource'
+import { downloadJson } from '../services/downloadFile'
 import type { KeyValueStore } from '../services/storage'
 import {
   vibration as defaultVibration,
@@ -157,6 +164,17 @@ export default function App({
     startLocation()
   }, [startLocation])
 
+  const recorder = useRideRecorder()
+  const { ring: ringAlarm } = alarm
+  const { event: recordEvent } = recorder
+  const handleAlarm = useCallback(
+    (reason: 'arrived' | 'passed') => {
+      recordEvent('alarm', reason)
+      ringAlarm(reason)
+    },
+    [recordEvent, ringAlarm],
+  )
+
   const trip = useTrip({
     destination,
     radiusM,
@@ -165,8 +183,15 @@ export default function App({
     stopLocation,
     audio,
     wakeLock,
-    onAlarm: alarm.ring,
+    onAlarm: handleAlarm,
+    onReading: recorder.reading,
   })
+
+  /** Starts the trip (and the ride log, if the rider opted in). */
+  const beginTrip = useCallback(() => {
+    trip.start()
+    if (destination) recorder.begin(destination, radiusM)
+  }, [trip, recorder, destination, radiusM])
   useEffect(() => {
     tripActiveRef.current = trip.isActive
   }, [trip.isActive])
@@ -198,19 +223,21 @@ export default function App({
     // Skip the location explainer if location is already running.
     else if (needsExplainer && location.status === 'off')
       setExplainerFor('trip')
-    else trip.start()
-  }, [settings.introSeen, needsExplainer, location.status, trip])
+    else beginTrip()
+  }, [settings.introSeen, needsExplainer, location.status, beginTrip])
 
   const handleEndTrip = useCallback(() => {
     alarm.stop()
     trip.end()
-  }, [alarm, trip])
+    recorder.finish('end')
+  }, [alarm, trip, recorder])
 
   /** "I'm getting off": silence the alarm and finish the trip. */
   const handleGettingOff = useCallback(() => {
     alarm.stop()
     trip.finish()
-  }, [alarm, trip])
+    recorder.finish('getting-off')
+  }, [alarm, trip, recorder])
 
   const handleTestAlarm = useCallback(() => {
     // Unlock inside this tap so the browser lets the sound play.
@@ -337,6 +364,24 @@ export default function App({
                   onDismiss={backgroundReturn.dismiss}
                 />
               )}
+              {recorder.recording && (
+                <p
+                  role="status"
+                  className="rounded-xl bg-navy/10 p-3 text-sm text-ink"
+                >
+                  {copy.record.recording}
+                </p>
+              )}
+              {recorder.finished && (
+                <RideLogCard
+                  log={recorder.finished}
+                  onDownload={() => {
+                    const log = recorder.finished!
+                    downloadJson(rideLogFilename(log), log)
+                  }}
+                  onDiscard={recorder.dismiss}
+                />
+              )}
               {trip.phase === 'ended' && (
                 <TripEndedCard onDone={handlePlanAnother} />
               )}
@@ -364,12 +409,19 @@ export default function App({
             </>
           }
           footer={
-            <SoundSettings
-              audio={audio}
-              ringtoneId={ringtoneId}
-              onRingtoneChange={settings.setRingtoneId}
-              onTestAlarm={handleTestAlarm}
-            />
+            <>
+              <SoundSettings
+                audio={audio}
+                ringtoneId={ringtoneId}
+                onRingtoneChange={settings.setRingtoneId}
+                onTestAlarm={handleTestAlarm}
+              />
+              <RecordToggle
+                checked={recorder.enabled}
+                disabled={tripActive}
+                onChange={recorder.setEnabled}
+              />
+            </>
           }
           emptyExtra={
             isSim ? undefined : (
@@ -408,7 +460,14 @@ export default function App({
           stopName={destination?.name}
           distanceM={distanceM}
           onStop={ringing.reason === 'test' ? alarm.stop : handleGettingOff}
-          onSnooze={ringing.reason === 'test' ? undefined : alarm.snooze}
+          onSnooze={
+            ringing.reason === 'test'
+              ? undefined
+              : () => {
+                  recorder.event('snooze')
+                  alarm.snooze()
+                }
+          }
         />
       )}
 
@@ -419,7 +478,7 @@ export default function App({
             setIntroOpen(false)
             settings.markIntroSeen()
             // Still inside the tap, so the trip can unlock sound.
-            trip.start()
+            beginTrip()
           }}
           onCancel={() => setIntroOpen(false)}
         />
@@ -431,7 +490,7 @@ export default function App({
             const intent = explainerFor
             setExplainerFor(null)
             // Still inside the tap, so the trip can unlock sound.
-            if (intent === 'trip') trip.start()
+            if (intent === 'trip') beginTrip()
             else startTracking()
           }}
           onCancel={() => setExplainerFor(null)}

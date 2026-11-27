@@ -119,6 +119,16 @@ export const copy = {
       `Para Po was in the background for ${away}, so tracking may have paused. Keep it open on screen until your stop.`,
     dismiss: 'OK',
   },
+  record: {
+    section: 'Testing tools',
+    label: 'Save a GPS log of my next trip (for testing)',
+    hint: "The log stays on this phone until you download it. It's your exact route, so only share it if you're comfortable.",
+    recording: 'Recording a GPS log of this trip. It stays on this phone.',
+    ready: (readings: number, alarms: number) =>
+      `GPS log of your trip: ${readings} readings, ${alarms} ${alarms === 1 ? 'alarm' : 'alarms'}.`,
+    download: 'Download log',
+    discard: 'Discard',
+  },
   demo: {
     try: 'No ride right now? Try a demo ride',
     exit: 'Exit demo',

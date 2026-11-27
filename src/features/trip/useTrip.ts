@@ -25,6 +25,8 @@ type UseTripOptions = {
   wakeLock: ScreenWakeLock
   /** The geofence decided it's time to ring. */
   onAlarm: (reason: 'arrived' | 'passed') => void
+  /** Every reading and the geofence's verdict on it (for the ride recorder). */
+  onReading?: (fix: LocationFix, result: GeofenceResult) => void
   watchdogMs?: number
 }
 
@@ -41,6 +43,7 @@ export function useTrip({
   audio,
   wakeLock,
   onAlarm,
+  onReading,
   watchdogMs = GPS_WATCHDOG_MS,
 }: UseTripOptions) {
   const [phase, setPhase] = useState<TripPhase>('planning')
@@ -52,11 +55,13 @@ export function useTrip({
   const geofenceRef = useRef(INITIAL_GEOFENCE_STATE)
   const lastFixAtRef = useRef(0)
   const onAlarmRef = useRef(onAlarm)
+  const onReadingRef = useRef(onReading)
   const lastFixRef = useRef<LocationFix | null>(fix)
 
   useEffect(() => {
     onAlarmRef.current = onAlarm
-  }, [onAlarm])
+    onReadingRef.current = onReading
+  }, [onAlarm, onReading])
 
   const setPhaseBoth = (next: TripPhase) => {
     phaseRef.current = next
@@ -133,6 +138,7 @@ export function useTrip({
     )
     geofenceRef.current = next.state
     setResult(next)
+    onReadingRef.current?.(fix, next)
     if (next.event === 'started-near') setStartedNear(true)
     if (next.state.armed) setStartedNear(false)
     if (next.event === 'arrived' || next.event === 'passed') {

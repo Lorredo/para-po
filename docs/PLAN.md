@@ -9,18 +9,18 @@ This is the living plan for Para Po, a web-based destination alarm (PWA) for jee
 
 ## Status
 
-| Milestone                                      | Status  |
-| ---------------------------------------------- | ------- |
-| M0 Project setup and first deploy              | ✅ Done |
-| M1 Map, tap to set stop, radius circle         | ✅ Done |
-| M2 Destination search                          | ✅ Done |
-| M3 Live location, distance readout, demo ride  | ✅ Done |
-| M4 Geofence logic ("when to ring"), test-first | ✅ Done |
-| M5 Audio, vibration and alarm screen           | ✅ Done |
-| M6 Trip start/stop and screen wake lock        | ✅ Done |
-| M7 Installable PWA and offline app shell       | ✅ Done |
-| M8 Resilience and polish                       | ✅ Done |
-| M9 Real-ride field test and portfolio README   | ⏭ Next  |
+| Milestone                                      | Status                             |
+| ---------------------------------------------- | ---------------------------------- |
+| M0 Project setup and first deploy              | ✅ Done                            |
+| M1 Map, tap to set stop, radius circle         | ✅ Done                            |
+| M2 Destination search                          | ✅ Done                            |
+| M3 Live location, distance readout, demo ride  | ✅ Done                            |
+| M4 Geofence logic ("when to ring"), test-first | ✅ Done                            |
+| M5 Audio, vibration and alarm screen           | ✅ Done                            |
+| M6 Trip start/stop and screen wake lock        | ✅ Done                            |
+| M7 Installable PWA and offline app shell       | ✅ Done                            |
+| M8 Resilience and polish                       | ✅ Done                            |
+| M9 Real-ride field test and portfolio README   | 🟡 In progress: field test pending |
 
 ## Goals and constraints
 
@@ -194,11 +194,23 @@ From then on, each GPS fix goes to `geofence.evaluate()` (a pure function). When
 
   End-to-end tests check the map stays usable and the rider stays visible.
 
-### M9: Field test and portfolio
+### 🟡 M9: Field test and portfolio
 
-- [ ] One real ride with a track recorder; the recording becomes a test fixture
-- [ ] iOS and Android compatibility matrix from real devices
-- [ ] README: story behind the name, limitations and trade-offs, native vs web comparison, screenshots and demo GIF
+- [x] Opt-in ride recorder (Alarm settings › Testing tools): every GPS reading with the geofence's decision, plus alarm, snooze and background events; memory only, download on request
+- [x] `src/lib/geo/rideLog.ts`: record, validate (`parseRideLog`) and replay (`replayRide`) rides, at 100% coverage
+- [x] Fixture harness: every ride in `tests/fixtures/rides/` is replayed on each test run and must make the same decisions as on the real ride (optional `expect` block)
+- [x] README for the portfolio: the story of the name, demo GIF and screenshots, how it works, limitations and trade-offs, native vs web, engineering notes, testing, privacy, credits
+- [x] `npm run media`: screenshots and demo GIF generated from the production build (no ffmpeg; `gifenc` + `pngjs`)
+- [x] GitHub Actions CI on every push: lint, format, types, unit tests with the coverage gate, build, Playwright
+- [ ] **Waiting on you:** one real ride with the recorder on; the log is added as a fixture (trimmed for privacy)
+- [ ] **Waiting on you:** which phones and browsers Para Po has been tried on, to fill in the README's "verified" column
+
+## M10 (proposed): Para Po for Android
+
+- [ ] Capacitor wrapper around the same app (~90% shared code)
+- [ ] Background-location `LocationProvider` (Android foreground service)
+- [ ] Alarm-style local notification that rings with the screen locked
+- [ ] Ship as an APK on GitHub Releases ($0); Google Play is optional ($25 one-time)
 
 ## Stretch features (after the MVP)
 
@@ -257,6 +269,11 @@ Choices made during the build, and why.
 | M8   | Hide search during a trip; compact demo panel while riding                        | Found with an iPhone SE screenshot: the demo controls covered almost the whole map, and my first short-screen test only checked the start screen.                                                                                                                                   |
 | M8   | Measure the overlay height for map framing                                        | The fixed 210 px guess was taller than the whole map on small phones, so framing silently failed.                                                                                                                                                                                   |
 | M8   | Check the axe audit can fail                                                      | A suite that passes first time proves nothing on its own; a planted low-contrast line confirmed axe flags `color-contrast` in this setup.                                                                                                                                           |
+| M9   | Opt-in ride recorder, memory only                                                 | A GPS trace is personal data: off by default, never stored or uploaded, downloaded only on request, and the README asks for trimming before committing one.                                                                                                                         |
+| M9   | Replay recorded rides in the test suite                                           | Real commutes become permanent regression tests for the "when to ring" logic, so tuning thresholds later can't silently break a ride that worked.                                                                                                                                   |
+| M9   | Recorder folded under "Testing tools"                                             | Found by an end-to-end test: the extra checkbox pushed the panel to its height cap and shrank every rider's map to make room for a tester's option.                                                                                                                                 |
+| M9   | Tap the map at positions relative to its size in tests                            | A fixed y = 300 px tap broke when the map got shorter; relative positions follow the layout.                                                                                                                                                                                        |
+| M9   | README presents native as a plan, not a product                                   | There's no native version yet (the original brief assumed one); the comparison is written as the decision behind a proposed M10.                                                                                                                                                    |
 
 ## Risks and mitigations
 
@@ -309,7 +326,7 @@ Run everything with: `npm run lint && npm run typecheck && npm run coverage && n
 
 Defaults are in use until these are answered.
 
-1. What stack is the native version built in? This is needed for the README's native vs web comparison.
+1. ~~What stack is the native version built in?~~ Answered: there isn't one yet. Native is the proposed M10.
 2. Ringtones: default is synthesised tones or CC0 sounds, unless you have your own.
 3. Default radius: 300 m (range 100 m to 2 km).
 4. Public demo ride on the live site: yes.

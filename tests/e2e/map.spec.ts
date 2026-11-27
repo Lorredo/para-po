@@ -20,8 +20,15 @@ test('tap sets the stop, slider resizes the circle, clear removes it', async ({
   const pin = page.locator('.para-po-pin')
   const circle = page.locator('path[fill="#2A9D8F"]')
 
+  // Tap positions relative to the map's real size, so layout changes
+  // elsewhere can't push them onto the panel.
+  const box = (await map.boundingBox())!
+  const at = (fx: number, fy: number) => ({
+    position: { x: box.width * fx, y: box.height * fy },
+  })
+
   await expect(pin).toHaveCount(0)
-  await map.click({ position: { x: 150, y: 150 } })
+  await map.click(at(0.35, 0.5))
 
   await expect(pin).toBeVisible()
   await expect(circle).toHaveCount(1)
@@ -35,7 +42,7 @@ test('tap sets the stop, slider resizes the circle, clear removes it', async ({
     .toBeGreaterThan((before?.width ?? 0) * 3)
 
   // Tapping somewhere else moves the pin rather than adding a second one.
-  await map.click({ position: { x: 250, y: 300 } })
+  await map.click(at(0.65, 0.8))
   await expect(pin).toHaveCount(1)
 
   await page.getByRole('button', { name: 'Clear' }).click()

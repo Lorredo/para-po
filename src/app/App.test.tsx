@@ -685,6 +685,70 @@ describe('App', () => {
       )
     })
 
+    it('records nothing unless the rider opts in', () => {
+      const { ride, setStop, startTrip } = renderTrip()
+      setStop()
+      startTrip()
+      expect(screen.queryByText(copy.record.recording)).toBeNull()
+      for (const n of [900, 290, 280]) ride(n)
+      fireEvent.click(screen.getByRole('button', { name: copy.alarm.stop }))
+      expect(
+        screen.queryByRole('button', { name: copy.record.download }),
+      ).toBeNull()
+    })
+
+    it('opt-in ride log: records the trip, then downloads or discards it', () => {
+      const createObjectURL = vi.fn((_blob: Blob) => 'blob:ride')
+      Object.defineProperty(URL, 'createObjectURL', {
+        value: createObjectURL,
+        configurable: true,
+      })
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        value: vi.fn(),
+        configurable: true,
+      })
+      const downloads: string[] = []
+      const click = vi
+        .spyOn(HTMLAnchorElement.prototype, 'click')
+        .mockImplementation(function (this: HTMLAnchorElement) {
+          downloads.push(this.download)
+        })
+
+      try {
+        const { ride, setStop, startTrip } = renderTrip()
+        fireEvent.click(
+          screen.getByRole('checkbox', { name: copy.record.label }),
+        )
+        setStop()
+        startTrip()
+        expect(screen.getByText(copy.record.recording)).toBeInTheDocument()
+        // Can't change it mid-trip.
+        expect(
+          screen.getByRole('checkbox', { name: copy.record.label }),
+        ).toBeDisabled()
+
+        for (const n of [900, 800, 290, 280]) ride(n)
+        fireEvent.click(screen.getByRole('button', { name: copy.alarm.stop }))
+
+        expect(screen.getByText(copy.record.ready(4, 1))).toBeInTheDocument()
+        fireEvent.click(
+          screen.getByRole('button', { name: copy.record.download }),
+        )
+        expect(downloads).toHaveLength(1)
+        expect(downloads[0]).toMatch(
+          /^para-po-ride-\d{4}-\d{2}-\d{2}-\d{4}\.json$/,
+        )
+        expect(createObjectURL.mock.calls[0]![0].type).toBe('application/json')
+
+        fireEvent.click(
+          screen.getByRole('button', { name: copy.record.discard }),
+        )
+        expect(screen.queryByText(copy.record.ready(4, 1))).toBeNull()
+      } finally {
+        click.mockRestore()
+      }
+    })
+
     it('remembers the radius and ringtone for next time', () => {
       const settingsStore = createMemoryStore()
       const first = renderTrip({ settingsStore })
