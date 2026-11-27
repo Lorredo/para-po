@@ -16,8 +16,13 @@ import {
   MIN_ZOOM,
 } from '../../config/map'
 import { copy } from '../../content/copy'
+import type { TrackingStatus } from '../../features/location/useLocationTracking'
 import type { LatLng } from '../../lib/geo/types'
+import type { LocationFix } from '../../services/location/types'
 import { destinationIcon } from './destinationIcon'
+import { LocateButton } from './LocateButton'
+import { MapControl } from './MapControl'
+import { UserLocationLayer } from './UserLocationLayer'
 
 /** Ask the map to frame a place. A new object triggers a new move. */
 export type MapFocusRequest = {
@@ -30,9 +35,13 @@ type MapViewProps = {
   radiusM: number
   focus: MapFocusRequest | null
   onDestinationChange: (next: LatLng) => void
+  userFix: LocationFix | null
+  locateStatus: TrackingStatus
+  onLocate: () => void
 }
 
 const RADIUS_STYLE = {
+  className: 'para-po-radius',
   color: '#2A9D8F',
   weight: 2,
   fillColor: '#2A9D8F',
@@ -44,6 +53,9 @@ export function MapView({
   radiusM,
   focus,
   onDestinationChange,
+  userFix,
+  locateStatus,
+  onLocate,
 }: MapViewProps) {
   return (
     <MapContainer
@@ -59,8 +71,11 @@ export function MapView({
         attribution={ACTIVE_TILES.attribution}
         maxZoom={ACTIVE_TILES.maxZoom}
       />
-      {/* Top-left is taken by the search bar. */}
+      {/* Top-left is taken by the search bar. The locate button sits above zoom. */}
       <ZoomControl position="bottomright" />
+      <MapControl position="bottomright">
+        <LocateButton status={locateStatus} onClick={onLocate} />
+      </MapControl>
       <TapToPick onPick={onDestinationChange} />
       <MapFocus request={focus} />
       {destination && (
@@ -77,6 +92,7 @@ export function MapView({
           />
         </>
       )}
+      {userFix && <UserLocationLayer fix={userFix} />}
     </MapContainer>
   )
 }

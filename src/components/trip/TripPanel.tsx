@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react'
 import { copy } from '../../content/copy'
 import type { Destination } from '../../features/trip/types'
-import { formatLatLng } from '../../lib/geo/format'
+import { formatDistance, formatLatLng } from '../../lib/geo/format'
 import { RadiusSlider } from './RadiusSlider'
 
 type TripPanelProps = {
@@ -8,6 +9,11 @@ type TripPanelProps = {
   radiusM: number
   onRadiusChange: (meters: number) => void
   onClearDestination: () => void
+  /** Straight-line distance from the user to the stop, when both are known. */
+  distanceM?: number | null
+  accuracyM?: number | null
+  /** A status line shown above everything else, e.g. GPS problems. */
+  notice?: ReactNode
 }
 
 export function TripPanel({
@@ -15,12 +21,17 @@ export function TripPanel({
   radiusM,
   onRadiusChange,
   onClearDestination,
+  distanceM = null,
+  accuracyM = null,
+  notice,
 }: TripPanelProps) {
   return (
     <section
       aria-label={copy.setup.sectionLabel}
       className="relative z-[1000] space-y-4 rounded-t-2xl bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
     >
+      {notice}
+
       {destination ? (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -34,9 +45,25 @@ export function TripPanel({
               {destination.kind && <>{destination.kind} · </>}
               {formatLatLng(destination)}
             </p>
-            <p className="mt-1 text-sm text-ink/80">
-              {copy.setup.destinationHint}
-            </p>
+            {distanceM !== null ? (
+              <div className="mt-2" data-testid="distance-readout">
+                <p className="text-2xl font-bold text-navy tabular-nums">
+                  {formatDistance(distanceM)}{' '}
+                  <span className="text-base font-semibold text-ink/70">
+                    {copy.location.toStop}
+                  </span>
+                </p>
+                {accuracyM !== null && (
+                  <p className="text-xs text-ink/60 tabular-nums">
+                    {copy.location.accuracy(accuracyM)}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-1 text-sm text-ink/80">
+                {copy.setup.destinationHint}
+              </p>
+            )}
           </div>
           <button
             type="button"

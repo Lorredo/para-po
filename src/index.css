@@ -11,6 +11,8 @@
   --color-route-teal: #2a9d8f;
   --color-paper: #faf7f2;
   --color-ink: #1f2933;
+  /* The familiar "you are here" blue, kept apart from the brand colours. */
+  --color-gps-blue: #1a73e8;
 
   --font-sans:
     'Plus Jakarta Sans Variable', system-ui, -apple-system, 'Segoe UI', Roboto,

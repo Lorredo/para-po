@@ -35,6 +35,49 @@ export const copy = {
     destinationHint: 'Tap the map or drag the pin to move it.',
     clear: 'Clear',
   },
+  location: {
+    locate: 'Show my location',
+    recenter: 'Center on my location',
+    explainer: {
+      title: 'Allow location?',
+      body: "Para Po uses your location to know when you're close to your stop. It stays on your phone and is never uploaded.",
+      allow: 'Allow location',
+      notNow: 'Not now',
+    },
+    locating: 'Finding your location…',
+    weakSignal:
+      'GPS signal is weak, so the distance may be off. Try near a window.',
+    signalLost:
+      'Lost GPS signal (tunnels and covered stations do this). Still trying. If it keeps up, check that Location is on for your phone.',
+    toStop: 'to your stop',
+    accuracy: (meters: number) => `GPS accuracy ±${Math.round(meters)} m`,
+    dismiss: 'OK',
+    errors: {
+      'permission-denied': {
+        title: 'Location is blocked',
+        body: 'Turn it on, then tap the location button again. Android Chrome: tap the icon left of the address › Permissions › Location. iPhone: Settings › Privacy & Security › Location Services › Safari Websites.',
+      },
+      insecure: {
+        title: 'Location needs a secure connection',
+        body: 'Open Para Po with an https:// address to use your location.',
+      },
+      unsupported: {
+        title: "This browser can't share location",
+        body: 'Try the latest Chrome or Safari.',
+      },
+    },
+  },
+  sim: {
+    label: 'Simulated ride controls',
+    badge: 'Demo ride',
+    start: 'Start demo ride',
+    play: 'Play',
+    pause: 'Pause',
+    speed: 'Playback speed',
+    progress: 'Ride progress',
+    progressText: (done: string, total: string) => `${done} of ${total}`,
+    useStop: (name: string) => `Set stop: ${name}`,
+  },
   radius: {
     label: 'Alert me within',
     hint: 'Go bigger for fast rides like the MRT or LRT.',
