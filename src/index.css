@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+/*
+ * Para Po brand tokens.
+ * Signal Red is reserved for the alarm state so it always means "now".
+ */
+@theme {
+  --color-jeep-yellow: #ffb703;
+  --color-navy: #0b3c5d;
+  --color-signal-red: #e63946;
+  --color-route-teal: #2a9d8f;
+  --color-paper: #faf7f2;
+  --color-ink: #1f2933;
+
+  --font-sans:
+    'Plus Jakarta Sans Variable', system-ui, -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+  }
+}
