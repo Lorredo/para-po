@@ -5,11 +5,22 @@
 export const copy = {
   appName: 'Para Po',
   tagline: 'Your stop, never missed.',
-  emptyState: {
-    title: 'Where are you getting off?',
-    body: 'Set your stop on the map and Para Po will call it for you, para hindi ka lumampas.',
+  map: {
+    label: 'Map. Tap to set your stop.',
+    destinationMarker: 'Your stop',
   },
-  comingSoon: 'Map coming soon. Ingat!',
+  setup: {
+    sectionLabel: 'Trip setup',
+    emptyTitle: 'Where are you getting off?',
+    emptyHint: 'Tap the map to drop a pin on your stop.',
+    destinationTitle: 'Your stop',
+    destinationHint: 'Tap the map or drag the pin to move it.',
+    clear: 'Clear',
+  },
+  radius: {
+    label: 'Alert me within',
+    hint: 'Go bigger for fast rides like the MRT or LRT.',
+  },
   alarm: {
     title: 'Para po!',
     body: "You're near your stop.",

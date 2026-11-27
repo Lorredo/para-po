@@ -1,27 +1,41 @@
+import { useCallback, useState } from 'react'
 import { Logo } from '../components/brand/Logo'
+import { MapView } from '../components/map/MapView'
+import { TripPanel } from '../components/trip/TripPanel'
+import { RADIUS_DEFAULT_M } from '../config/trip'
 import { copy } from '../content/copy'
+import type { LatLng } from '../lib/geo/types'
 
 export default function App() {
+  const [destination, setDestination] = useState<LatLng | null>(null)
+  const [radiusM, setRadiusM] = useState(RADIUS_DEFAULT_M)
+
+  const clearDestination = useCallback(() => setDestination(null), [])
+
   return (
-    <div className="flex min-h-full flex-col">
-      <header className="flex items-center gap-3 bg-navy px-4 py-3 text-white">
-        <Logo size={36} />
+    <div className="flex h-full flex-col">
+      <header className="flex items-center gap-3 bg-navy px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 text-white">
+        <Logo size={32} />
         <div>
-          <h1 className="text-lg leading-tight font-bold">{copy.appName}</h1>
-          <p className="text-sm text-white/80">{copy.tagline}</p>
+          <h1 className="text-base leading-tight font-bold">{copy.appName}</h1>
+          <p className="text-xs text-white/80">{copy.tagline}</p>
         </div>
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-        <Logo size={96} />
-        <h2 className="text-2xl font-bold text-navy">
-          {copy.emptyState.title}
-        </h2>
-        <p className="max-w-sm text-ink/80">{copy.emptyState.body}</p>
-        <p className="rounded-full bg-jeep-yellow px-4 py-2 text-sm font-semibold text-navy">
-          {copy.comingSoon}
-        </p>
+      <main className="relative min-h-0 flex-1">
+        <MapView
+          destination={destination}
+          radiusM={radiusM}
+          onDestinationChange={setDestination}
+        />
       </main>
+
+      <TripPanel
+        destination={destination}
+        radiusM={radiusM}
+        onRadiusChange={setRadiusM}
+        onClearDestination={clearDestination}
+      />
     </div>
   )
 }
