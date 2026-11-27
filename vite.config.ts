@@ -52,7 +52,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    // tests/unit: checks on project config that run in plain Node.
+    include: ['src/**/*.test.{ts,tsx}', 'tests/unit/**/*.test.ts'],
     coverage: {
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/main.tsx'],
