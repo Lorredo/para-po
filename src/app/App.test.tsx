@@ -13,6 +13,17 @@ import { createFakeProvider } from '../test/fakeLocationProvider'
 import { createFakeWakeLock } from '../test/fakeWakeLock'
 import App from './App'
 
+// The service worker only exists in a production build.
+vi.mock('../features/pwa/useAppUpdate', () => ({
+  useAppUpdate: () => ({
+    needRefresh: false,
+    offlineReady: false,
+    update: () => {},
+    dismissUpdate: () => {},
+    dismissOfflineReady: () => {},
+  }),
+}))
+
 // Leaflet needs real layout, so the map itself is covered by Playwright.
 // Here a stub map lets us drive taps and inspect what App passes in.
 vi.mock('../components/map/MapView', () => ({

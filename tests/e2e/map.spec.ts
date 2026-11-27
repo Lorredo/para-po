@@ -56,3 +56,16 @@ test('uses the brand font', async ({ page }) => {
     )
     .toBe(true)
 })
+
+test('loads without console errors', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text())
+  })
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Start trip' })).toBeVisible()
+  await page.waitForTimeout(1000)
+  // Tile requests are aborted on purpose in these tests; ignore those.
+  expect(errors.filter((e) => !e.includes('ERR_FAILED'))).toEqual([])
+})

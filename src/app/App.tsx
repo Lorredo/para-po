@@ -15,6 +15,8 @@ import {
 } from '../components/map/MapView'
 import { DestinationSearch } from '../components/search/DestinationSearch'
 import { SimPanel } from '../components/sim/SimPanel'
+import { InstallButton } from '../components/pwa/InstallButton'
+import { PwaNotices } from '../components/pwa/PwaNotices'
 import { LocationExplainer } from '../components/system/LocationExplainer'
 import { LocationNotice } from '../components/system/LocationNotice'
 import { SoundSettings } from '../components/trip/SoundSettings'
@@ -26,6 +28,12 @@ import { copy } from '../content/copy'
 import { useAlarm } from '../features/alarm/useAlarm'
 import { useGeolocationPermission } from '../features/location/useGeolocationPermission'
 import { useLocationTracking } from '../features/location/useLocationTracking'
+import {
+  type InstallPromptStore,
+  installPrompt as defaultInstallPrompt,
+} from '../features/pwa/installPrompt'
+import { useAppUpdate } from '../features/pwa/useAppUpdate'
+import { useOnlineStatus } from '../features/pwa/useOnlineStatus'
 import { useSettings } from '../features/settings/useSettings'
 import type { Destination } from '../features/trip/types'
 import { useTrip } from '../features/trip/useTrip'
@@ -62,6 +70,7 @@ type AppProps = {
   vibration?: Vibration
   wakeLock?: ScreenWakeLock
   settingsStore?: KeyValueStore
+  installPrompt?: InstallPromptStore
 }
 
 export default function App({
@@ -70,6 +79,7 @@ export default function App({
   vibration = defaultVibration,
   wakeLock = defaultWakeLock,
   settingsStore,
+  installPrompt = defaultInstallPrompt,
 }: AppProps) {
   const [source] = useState<LocationSource>(
     () => locationSource ?? selectLocationSource(window.location.search),
@@ -77,6 +87,8 @@ export default function App({
   const isSim = source.sim !== undefined
 
   const settings = useSettings(settingsStore)
+  const online = useOnlineStatus()
+  const appUpdate = useAppUpdate()
   const { radiusM, ringtoneId } = settings
   const [destination, setDestination] = useState<Destination | null>(null)
   const [focus, setFocus] = useState<MapFocusRequest | null>(null)
@@ -216,6 +228,7 @@ export default function App({
           <h1 className="text-base leading-tight font-bold">{copy.appName}</h1>
           <p className="text-xs text-white/80">{copy.tagline}</p>
         </div>
+        <InstallButton store={installPrompt} />
       </header>
 
       <main className="relative min-h-0 flex-1">
@@ -259,6 +272,15 @@ export default function App({
         accuracyM={fix?.accuracyM ?? null}
         notice={
           <>
+            <PwaNotices
+              online={online}
+              needRefresh={appUpdate.needRefresh}
+              offlineReady={appUpdate.offlineReady}
+              tripActive={trip.phase === 'active'}
+              onUpdate={appUpdate.update}
+              onDismissUpdate={appUpdate.dismissUpdate}
+              onDismissOfflineReady={appUpdate.dismissOfflineReady}
+            />
             {trip.phase === 'ended' && (
               <TripEndedCard onDone={handlePlanAnother} />
             )}

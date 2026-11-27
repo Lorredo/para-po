@@ -18,8 +18,8 @@ This is the living plan for Para Po, a web-based destination alarm (PWA) for jee
 | M4 Geofence logic ("when to ring"), test-first | ✅ Done |
 | M5 Audio, vibration and alarm screen           | ✅ Done |
 | M6 Trip start/stop and screen wake lock        | ✅ Done |
-| M7 Installable PWA and offline app shell       | ⏭ Next  |
-| M8 Resilience and polish                       | Planned |
+| M7 Installable PWA and offline app shell       | ✅ Done |
+| M8 Resilience and polish                       | ⏭ Next  |
 | M9 Real-ride field test and portfolio README   | Planned |
 
 ## Goals and constraints
@@ -160,22 +160,26 @@ From then on, each GPS fix goes to `geofence.evaluate()` (a pure function). When
 - [x] Radius and ringtone saved to localStorage and repaired field by field if invalid
 - [x] Demo ride uses a simulated clock, so 10× speed isn't rejected as a GPS glitch
 - [x] End-to-end tests: the demo ride rings by itself at Ayala; an emulated phone walking into the radius rings; snooze then End trip stays quiet; the dot stays on screen
-- [ ] **Waiting on you:** a full demo ride ringing on a real Android phone, with the screen staying on
+- [x] Confirmed on a real phone by the owner: the demo ride rings and the screen stays on
 
-### M7: Installable PWA
+### ✅ M7: Installable PWA
 
-- [ ] Manifest: name and short_name "Para Po", theme colour, maskable icons, Apple touch icon
-- [ ] Service worker precaches the app shell and sounds; works offline with a friendly offline-map state
-- [ ] Android install prompt; iOS "Share › Add to Home Screen" instructions
-- [ ] Update toast when a new version ships
-- [ ] `vercel.json`: no-cache for `sw.js` and the manifest
+- [x] Manifest: name and short_name "Para Po", standalone, portrait, theme `#0B3C5D`, background `#FAF7F2`; 192/512 icons, a maskable 512 and a 180 Apple touch icon
+- [x] Icons rendered from the logo by `npm run icons` (Playwright's Chromium, no image library); the maskable icon keeps the artwork inside Android's safe circle
+- [x] Service worker (vite-plugin-pwa / Workbox) precaches the app shell, fonts and icons (16 files, ~570 KB). Map tiles and search are not cached by the service worker, per OSM policy.
+- [x] Opens with no internet after the first visit; an offline notice explains that GPS and the alarm still work and the map and search need a connection
+- [x] Install: Android/desktop Chrome get a header **Install** button that uses the browser prompt (captured before React mounts); iPhone/iPad get "Share › Add to Home Screen" steps; hidden once installed
+- [x] Update prompt ("A new version of Para Po is ready") checks hourly and **never appears during a trip**
+- [x] `vercel.json`: `sw.js`, `workbox-*.js` and the manifest are always revalidated
+- [x] End-to-end tests against the production build: manifest and icon sizes, **Chrome reports no installability errors**, the service worker takes control, the app opens offline with the brand font, and the offline notice comes and goes; no console errors in dev
 
-### M8: Resilience and polish
+### ⏭ M8: Resilience and polish
 
 - [ ] First-run explainer: keep Para Po open with the screen on
 - [ ] Banner when returning to the app: "Tracking may have paused while you were away"
 - [ ] Accessibility pass: contrast, focus, screen-reader announcements, reduced motion
 - [ ] A visible "Try a demo ride" entry point
+- [ ] Short screens (e.g. iPhone SE/14 in Safari): the trip panel takes too much height; make it scroll or collapse so the map stays usable
 
 ### M9: Field test and portfolio
 
@@ -228,6 +232,11 @@ Choices made during the build, and why.
 | M6   | Tell Leaflet when its container resizes                                           | When the panel shrank, Leaflet left a grey, tile-less band at the bottom of the taller map.                                                                                                                                             |
 | M6   | A wake-lock refusal while hidden counts as "lost", not an error                   | Browsers always refuse while the page is hidden; it's re-acquired on return. Only a refusal while visible (e.g. Battery Saver) shows the warning.                                                                                       |
 | M6   | "Start trip" replaces the demo's own start button                                 | One flow for real and demo rides, so the demo exercises exactly what riders use.                                                                                                                                                        |
+| M7   | Don't cache map tiles in the service worker                                       | OSM's tile policy discourages offline or bulk tile caching. The browser's HTTP cache still helps, and the trip itself (GPS + alarm) needs no internet.                                                                                  |
+| M7   | `registerType: 'prompt'`, and no update prompt during a trip                      | Auto-reloading to a new version mid-ride would stop GPS and the alarm.                                                                                                                                                                  |
+| M7   | Capture `beforeinstallprompt` at module load, not in a React effect               | Chrome can fire it before React mounts; a late listener would miss it and the Install button would never appear.                                                                                                                        |
+| M7   | Render icons with Playwright instead of adding an image library                   | It's already a dev dependency; one script, committed PNGs. Also caught: `URL.pathname` breaks on the space in "Para Po", so it uses `fileURLToPath`.                                                                                    |
+| M7   | Leave 4 moderate `npm audit` advisories (glob, minimatch)                         | They're inside Workbox's build tooling, run only at build time on the developer's machine, and never ship to users. `npm audit fix --force` would downgrade the PWA plugin. Revisit when Workbox updates.                               |
 
 ## Risks and mitigations
 

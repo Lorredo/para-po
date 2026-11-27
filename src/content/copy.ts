@@ -100,6 +100,24 @@ export const copy = {
       done: 'Plan another trip',
     },
   },
+  pwa: {
+    install: 'Install',
+    offline:
+      "You're offline. GPS and the alarm still work; the map and search need a connection.",
+    updateReady: 'A new version of Para Po is ready.',
+    update: 'Update',
+    later: 'Later',
+    offlineReady: 'Para Po can now open without internet.',
+    ok: 'OK',
+    ios: {
+      title: 'Add Para Po to your Home Screen',
+      step1: 'In Safari, tap Share',
+      step2: 'Scroll down and tap "Add to Home Screen".',
+      step3: 'Tap "Add".',
+      why: 'Para Po then opens full screen, like an app, straight from your Home Screen.',
+      done: 'Got it',
+    },
+  },
   radius: {
     label: 'Alert me within',
     hint: 'Go bigger for fast rides like the MRT or LRT.',
