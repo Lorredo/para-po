@@ -5,6 +5,7 @@ import { copy } from '../content/copy'
 import type { LatLng } from '../lib/geo/types'
 import { selectLocationSource } from '../services/location/selectSource'
 import type { LocationFix } from '../services/location/types'
+import { createFakeAudio, createFakeVibration } from '../test/fakeAlarm'
 import { createFakeProvider } from '../test/fakeLocationProvider'
 import App from './App'
 
@@ -52,7 +53,13 @@ const BUENDIA = { lat: 14.5543, lng: 121.0345 }
 
 function renderApp() {
   const fake = createFakeProvider()
-  render(<App locationSource={{ provider: fake.provider }} />)
+  render(
+    <App
+      locationSource={{ provider: fake.provider }}
+      audio={createFakeAudio().audio}
+      vibration={createFakeVibration()}
+    />,
+  )
   return fake
 }
 
@@ -270,7 +277,13 @@ describe('App', () => {
     it('skips the explainer and offers ride controls', () => {
       vi.useFakeTimers()
       try {
-        render(<App locationSource={selectLocationSource('?sim')} />)
+        render(
+          <App
+            locationSource={selectLocationSource('?sim')}
+            audio={createFakeAudio().audio}
+            vibration={createFakeVibration()}
+          />,
+        )
         fireEvent.click(
           screen.getByRole('button', { name: copy.sim.useStop('Ayala') }),
         )
@@ -283,6 +296,95 @@ describe('App', () => {
         expect(
           within(panel()).getByTestId('distance-readout'),
         ).toHaveTextContent(/km to your stop/)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  describe('alarm', () => {
+    it('test alarm: unlocks sound, rings, and "Done" stops it', () => {
+      const { audio } = createFakeAudio()
+      const vibration = createFakeVibration()
+      render(
+        <App
+          locationSource={{ provider: createFakeProvider().provider }}
+          audio={audio}
+          vibration={vibration}
+        />,
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: copy.sound.test }))
+      const dialog = screen.getByRole('alertdialog', { name: 'Para po!' })
+      expect(dialog).toHaveAccessibleDescription(copy.alarm.body.test)
+      expect(audio.unlock).toHaveBeenCalled()
+      expect(audio.play).toHaveBeenCalledWith('jeepney', {
+        loop: true,
+        crescendo: false,
+      })
+      expect(vibration.start).toHaveBeenCalled()
+      // No snooze on a test.
+      expect(
+        within(dialog).queryByRole('button', { name: copy.alarm.snooze }),
+      ).toBeNull()
+
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: copy.alarm.done }),
+      )
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+      expect(audio.stop).toHaveBeenCalled()
+      expect(vibration.stop).toHaveBeenCalled()
+    })
+
+    it('rings with the chosen ringtone', () => {
+      const { audio } = createFakeAudio()
+      render(
+        <App
+          locationSource={{ provider: createFakeProvider().provider }}
+          audio={audio}
+          vibration={createFakeVibration()}
+        />,
+      )
+      fireEvent.change(
+        screen.getByRole('combobox', { name: copy.sound.label }),
+        {
+          target: { value: 'beeps' },
+        },
+      )
+      fireEvent.click(screen.getByRole('button', { name: copy.sound.test }))
+      expect(audio.play).toHaveBeenLastCalledWith('beeps', expect.anything())
+    })
+
+    it('a dropped pin has no name, so the alarm shows no "where" line', () => {
+      renderApp()
+      fireEvent.click(screen.getByRole('button', { name: 'tap map' }))
+      fireEvent.click(screen.getByRole('button', { name: copy.sound.test }))
+      expect(
+        within(screen.getByRole('alertdialog')).queryByText(/away/),
+      ).toBeNull()
+    })
+
+    it('shows the stop name and live distance on the alarm screen', () => {
+      vi.useFakeTimers()
+      try {
+        render(
+          <App
+            locationSource={selectLocationSource('?sim')}
+            audio={createFakeAudio().audio}
+            vibration={createFakeVibration()}
+          />,
+        )
+        fireEvent.click(
+          screen.getByRole('button', { name: copy.sim.useStop('Ayala') }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: copy.sim.start }))
+        fireEvent.click(screen.getByRole('button', { name: copy.sound.test }))
+        // The demo ride starts at North Avenue, about 12 km from Ayala.
+        expect(
+          within(screen.getByRole('alertdialog')).getByText(
+            /^Ayala · 1\d km away$/,
+          ),
+        ).toBeInTheDocument()
       } finally {
         vi.useRealTimers()
       }

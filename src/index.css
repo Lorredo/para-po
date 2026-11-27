@@ -13,10 +13,36 @@
   --color-ink: #1f2933;
   /* The familiar "you are here" blue, kept apart from the brand colours. */
   --color-gps-blue: #1a73e8;
+  /*
+   * Deeper red for the full-screen alarm: white text on Signal Red is only
+   * ~3.9:1 contrast; on this it's ~7:1, readable even in harsh sunlight.
+   */
+  --color-alarm-red: #b3121f;
 
   --font-sans:
     'Plus Jakarta Sans Variable', system-ui, -apple-system, 'Segoe UI', Roboto,
     sans-serif;
+}
+
+/* The alarm bell swings from its top, like a real one. */
+@keyframes para-po-ring {
+  0%,
+  50%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10% {
+    transform: rotate(16deg);
+  }
+  20% {
+    transform: rotate(-14deg);
+  }
+  30% {
+    transform: rotate(10deg);
+  }
+  40% {
+    transform: rotate(-6deg);
+  }
 }
 
 @layer base {

@@ -14,6 +14,8 @@ type TripPanelProps = {
   accuracyM?: number | null
   /** A status line shown above everything else, e.g. GPS problems. */
   notice?: ReactNode
+  /** Extra settings below the radius, e.g. the alarm sound. */
+  footer?: ReactNode
 }
 
 export function TripPanel({
@@ -24,6 +26,7 @@ export function TripPanel({
   distanceM = null,
   accuracyM = null,
   notice,
+  footer,
 }: TripPanelProps) {
   return (
     <section
@@ -83,6 +86,7 @@ export function TripPanel({
       )}
 
       <RadiusSlider value={radiusM} onChange={onRadiusChange} />
+      {footer}
     </section>
   )
 }

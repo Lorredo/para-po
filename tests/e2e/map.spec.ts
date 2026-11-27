@@ -42,3 +42,17 @@ test('tap sets the stop, slider resizes the circle, clear removes it', async ({
   await expect(pin).toHaveCount(0)
   await expect(circle).toHaveCount(0)
 })
+
+test('uses the brand font', async ({ page }) => {
+  const fontFamily = await page.evaluate(
+    () => getComputedStyle(document.body).fontFamily,
+  )
+  expect(fontFamily).toContain('Plus Jakarta Sans Variable')
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        document.fonts.check('16px "Plus Jakarta Sans Variable"'),
+      ),
+    )
+    .toBe(true)
+})

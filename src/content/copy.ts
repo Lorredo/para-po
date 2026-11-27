@@ -82,8 +82,33 @@ export const copy = {
     label: 'Alert me within',
     hint: 'Go bigger for fast rides like the MRT or LRT.',
   },
+  sound: {
+    label: 'Alarm sound',
+    preview: 'Preview',
+    stopPreview: 'Stop',
+    test: 'Test alarm',
+    volumeHint: "Turn your volume up. Para Po can't change it for you.",
+    unsupported: "This browser can't play alarm sounds.",
+    ringtones: {
+      jeepney: 'Jeepney beep',
+      bell: 'Bell',
+      chime: 'Chime',
+      beeps: 'Beeps',
+    },
+  },
   alarm: {
     title: 'Para po!',
-    body: "You're near your stop.",
+    body: {
+      arrived: "You're near your stop.",
+      passed: 'You may have just passed your stop.',
+      test: 'This is how your alarm will sound.',
+    },
+    whereWithDistance: (name: string, distance: string) =>
+      `${name} · ${distance} away`,
+    stop: "I'm getting off",
+    done: 'Done',
+    snooze: 'Snooze 1 min',
+    snoozed: (seconds: number) => `Snoozed. Ringing again in ${seconds} s.`,
+    turnOff: 'Turn off',
   },
 } as const

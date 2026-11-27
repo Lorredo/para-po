@@ -1,23 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AlarmOverlay } from '../components/alarm/AlarmOverlay'
+import { SnoozeNotice } from '../components/alarm/SnoozeNotice'
 import { Logo } from '../components/brand/Logo'
 import { type MapFocusRequest, MapView } from '../components/map/MapView'
 import { DestinationSearch } from '../components/search/DestinationSearch'
 import { SimPanel } from '../components/sim/SimPanel'
 import { LocationExplainer } from '../components/system/LocationExplainer'
 import { LocationNotice } from '../components/system/LocationNotice'
+import { SoundSettings } from '../components/trip/SoundSettings'
 import { TripPanel } from '../components/trip/TripPanel'
 import { RADIUS_DEFAULT_M } from '../config/trip'
 import { copy } from '../content/copy'
+import { useAlarm } from '../features/alarm/useAlarm'
 import { useGeolocationPermission } from '../features/location/useGeolocationPermission'
 import { useLocationTracking } from '../features/location/useLocationTracking'
 import type { Destination } from '../features/trip/types'
 import { haversineM } from '../lib/geo/distance'
 import type { LatLng } from '../lib/geo/types'
+import {
+  type AlarmAudio,
+  alarmAudio as defaultAlarmAudio,
+} from '../services/audio/alarmAudio'
+import { DEFAULT_RINGTONE, type RingtoneId } from '../services/audio/ringtones'
 import type { Place } from '../services/geocoding'
 import {
   type LocationSource,
   selectLocationSource,
 } from '../services/location/selectSource'
+import {
+  vibration as defaultVibration,
+  type Vibration,
+} from '../services/vibration'
 
 /** Frames about 900 m around the user: street level, with some context. */
 const USER_FOCUS_RADIUS_M = 300
@@ -25,9 +38,16 @@ const USER_FOCUS_RADIUS_M = 300
 type AppProps = {
   /** Injected in tests; defaults to real GPS, or a demo ride with ?sim. */
   locationSource?: LocationSource
+  /** Injected in tests; default to Web Audio and navigator.vibrate. */
+  audio?: AlarmAudio
+  vibration?: Vibration
 }
 
-export default function App({ locationSource }: AppProps) {
+export default function App({
+  locationSource,
+  audio = defaultAlarmAudio,
+  vibration = defaultVibration,
+}: AppProps) {
   const [source] = useState<LocationSource>(
     () => locationSource ?? selectLocationSource(window.location.search),
   )
@@ -37,6 +57,14 @@ export default function App({ locationSource }: AppProps) {
   const [radiusM, setRadiusM] = useState(RADIUS_DEFAULT_M)
   const [focus, setFocus] = useState<MapFocusRequest | null>(null)
   const [explainerOpen, setExplainerOpen] = useState(false)
+  const [ringtoneId, setRingtoneId] = useState<RingtoneId>(DEFAULT_RINGTONE)
+
+  const alarm = useAlarm({ audio, vibration, ringtoneId })
+  const handleTestAlarm = useCallback(() => {
+    // Unlock inside this tap so the browser lets the sound play.
+    void audio.unlock()
+    alarm.ring('test')
+  }, [audio, alarm])
 
   const location = useLocationTracking(source.provider)
   const permission = useGeolocationPermission(!isSim)
@@ -141,13 +169,36 @@ export default function App({ locationSource }: AppProps) {
         distanceM={distanceM}
         accuracyM={fix?.accuracyM ?? null}
         notice={
-          <LocationNotice
-            status={location.status}
-            error={location.error}
-            onDismiss={location.stop}
+          <>
+            {alarm.state.status === 'snoozed' && (
+              <SnoozeNotice until={alarm.state.until} onTurnOff={alarm.stop} />
+            )}
+            <LocationNotice
+              status={location.status}
+              error={location.error}
+              onDismiss={location.stop}
+            />
+          </>
+        }
+        footer={
+          <SoundSettings
+            audio={audio}
+            ringtoneId={ringtoneId}
+            onRingtoneChange={setRingtoneId}
+            onTestAlarm={handleTestAlarm}
           />
         }
       />
+
+      {alarm.state.status === 'ringing' && (
+        <AlarmOverlay
+          reason={alarm.state.reason}
+          stopName={destination?.name}
+          distanceM={distanceM}
+          onStop={alarm.stop}
+          onSnooze={alarm.state.reason === 'test' ? undefined : alarm.snooze}
+        />
+      )}
 
       {explainerOpen && (
         <LocationExplainer

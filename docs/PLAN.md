@@ -16,8 +16,8 @@ This is the living plan for Para Po, a web-based destination alarm (PWA) for jee
 | M2 Destination search                          | ✅ Done |
 | M3 Live location, distance readout, demo ride  | ✅ Done |
 | M4 Geofence logic ("when to ring"), test-first | ✅ Done |
-| M5 Audio, vibration and alarm screen           | ⏭ Next  |
-| M6 Trip start/stop and screen wake lock        | Planned |
+| M5 Audio, vibration and alarm screen           | ✅ Done |
+| M6 Trip start/stop and screen wake lock        | ⏭ Next  |
 | M7 Installable PWA and offline app shell       | Planned |
 | M8 Resilience and polish                       | Planned |
 | M9 Real-ride field test and portfolio README   | Planned |
@@ -131,14 +131,23 @@ From then on, each GPS fix goes to `geofence.evaluate()` (a pure function). When
 - [x] **Sweep:** 4 speeds × 4 reading gaps × 3 radii (48 cases) never stay silent; roads 450 m away never ring
 - [x] 100% statement, branch, function and line coverage of `src/lib/geo`, enforced in `vite.config.ts`
 
-### ⏭ M5: Audio and alarm screen
+### ✅ M5: Audio and alarm screen
 
-- [ ] Ringtone picker with preview (synthesised tones or CC0 sounds)
-- [ ] `audio.ts`: unlock, looped playback and stop, using Web Audio
-- [ ] Vibration where supported (no-op on iOS)
-- [ ] Alarm overlay with "Para po! You're near your stop.", Snooze 1 min and I'm getting off, sized for one thumb
+- [x] Four original ringtones synthesised with Web Audio (Jeepney beep, Bell, Chime, Beeps): no files, no licensing, works offline
+- [x] `src/services/audio/alarmAudio.ts`:
+  - unlock inside a tap (a silent one-sample sound for iOS);
+  - asks Safari 17+ to keep playing with the silent switch on (`navigator.audioSession`);
+  - looped playback scheduled 1.5 s ahead, which doesn't try to catch up after throttling;
+  - an 8 s volume build-up for real alarms;
+  - a clean fade-out on stop.
+- [x] The AudioContext is created only inside the first tap, never on page load
+- [x] Vibration repeats a 700/300 ms pattern while ringing; no-op on iOS; never calls the hardware unless it actually started
+- [x] Sound picker with Preview (plays one cycle) and **Test alarm** (full alarm screen and sound) so riders can check volume before a trip
+- [x] Full-screen alarm: "Para po!", with separate wording for _arrived_, _may have passed_ and _test_; stop name and distance; **I'm getting off** and **Snooze 1 min**; first button focused; bell animation respects reduced motion
+- [x] `useAlarm` hook: ring, stop, and snooze with a countdown notice. After a snooze it asks `shouldRingAgain()` (M6 will check you're still near).
+- [x] End-to-end tests in real Chromium check real Web Audio (the context runs, notes keep being scheduled, nothing after stop) and vibration calls
 
-### M6: Trip flow and wake lock
+### ⏭ M6: Trip flow and wake lock
 
 - [ ] Start/Stop trip runs the flow above; location starts automatically with the trip
 - [ ] Wake lock re-acquired when the tab becomes visible again; a banner if it can't be acquired
@@ -199,6 +208,12 @@ Choices made during the build, and why.
 | M4   | A near miss counts as "passed"                                      | Passing within radius + GPS accuracy and then moving away rings with "you may have passed your stop". Ringing slightly early costs little; staying silent costs the stop.                                           |
 | M4   | Separate "passed" from "arrived"                                    | The alarm screen can be honest ("You may have just passed your stop") instead of pretending you're arriving.                                                                                                        |
 | M4   | Coverage gate on `src/lib/geo` only                                 | 100% is worth enforcing for the logic that decides when to ring. UI code is covered by component and end-to-end tests instead. The gate also flagged two unreachable branches, which were removed.                  |
+| M5   | Synthesise ringtones with Web Audio instead of shipping audio files | No licensing questions, no downloads, nothing extra to cache for offline use, and the tones are original.                                                                                                           |
+| M5   | Darker "alarm red" (`#B3121F`) for the full-screen alarm            | White on brand Signal Red is ~3.9:1 contrast; on the darker red it's ~7:1, readable in harsh sunlight on a moving jeepney.                                                                                          |
+| M5   | A test alarm starts at full volume; a real alarm builds up over 8 s | A test should sound exactly like the worst case; a real alarm shouldn't be a shock.                                                                                                                                 |
+| M5   | Keep a **Test alarm** button in the product                         | Volume can't be set from a web page, so riders need a way to check it before the ride. It also made M5 testable on real phones before the trip flow existed.                                                        |
+| M5   | Don't create the AudioContext until a tap                           | Browsers warn about, and suspend, contexts created without a user gesture. Checking support no longer creates one.                                                                                                  |
+| M5   | `vibration.stop()` does nothing unless vibration started            | Found by an end-to-end test: React StrictMode's double mount called `vibrate(0)` on page load, which browsers warn about before the first tap.                                                                      |
 
 ## Risks and mitigations
 
