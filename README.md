@@ -6,7 +6,11 @@
 
 The name comes from **"Para po!"**, the polite call jeepney passengers use to say _"Stop here, please!"_
 
-> 🚧 Work in progress. The full README (architecture, limitations and tradeoffs, native vs web comparison) is coming in a later milestone.
+- **Live:** https://para-po-alpha.vercel.app/
+- **Try a demo ride (no travel needed):** https://para-po-alpha.vercel.app/?sim=edsa&speed=10
+- **Build plan, progress and decisions:** [docs/PLAN.md](docs/PLAN.md)
+
+> 🚧 Work in progress. The full README (architecture, limitations and trade-offs, native vs web comparison) is coming in a later milestone.
 
 ## Run locally
 
