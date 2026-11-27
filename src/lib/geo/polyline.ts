@@ -31,8 +31,10 @@ export function pointAlong(line: Polyline, distanceM: number): LatLng {
   while (cumulativeM[i]! < distanceM) i++
   const start = points[i - 1]!
   const end = points[i]!
+  // The loop stops on the first segment ending at or past `distanceM`, and the
+  // previous point is before it, so this segment always has a non-zero length.
   const segmentM = cumulativeM[i]! - cumulativeM[i - 1]!
-  const t = segmentM === 0 ? 0 : (distanceM - cumulativeM[i - 1]!) / segmentM
+  const t = (distanceM - cumulativeM[i - 1]!) / segmentM
   // Linear interpolation is fine for segments of a few km.
   return {
     lat: start.lat + (end.lat - start.lat) * t,

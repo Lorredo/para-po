@@ -15,8 +15,8 @@ This is the living plan for Para Po, a web-based destination alarm (PWA) for jee
 | M1 Map, tap to set stop, radius circle         | ✅ Done |
 | M2 Destination search                          | ✅ Done |
 | M3 Live location, distance readout, demo ride  | ✅ Done |
-| M4 Geofence logic ("when to ring"), test-first | ⏭ Next  |
-| M5 Audio, vibration and alarm screen           | Planned |
+| M4 Geofence logic ("when to ring"), test-first | ✅ Done |
+| M5 Audio, vibration and alarm screen           | ⏭ Next  |
 | M6 Trip start/stop and screen wake lock        | Planned |
 | M7 Installable PWA and offline app shell       | Planned |
 | M8 Resilience and polish                       | Planned |
@@ -62,7 +62,7 @@ This is the living plan for Para Po, a web-based destination alarm (PWA) for jee
  (browser | sim)   (pure)      (M5)          (M6)          (M5)
 ```
 
-- **`src/lib/geo/`**: pure geometry with no browser APIs. Includes haversine distance, offsets, polylines, formatting, and (M4) the geofence evaluator.
+- **`src/lib/geo/`**: pure geometry with no browser APIs. Includes haversine distance, offsets, polylines, closest approach to a segment, formatting, and the geofence evaluator ("when to ring"). Kept at 100% test coverage.
 - **`src/services/`**: browser-facing services.
   - `geocoding.ts`: Nominatim client with rate limiting, cache and cancellation.
   - `storage.ts`: safe localStorage.
@@ -120,16 +120,18 @@ From then on, each GPS fix goes to `geofence.evaluate()` (a pure function). When
 - [x] Explains before the browser's permission prompt; separate UI for blocked, lost signal, weak signal, insecure page and unsupported browser
 - [x] Demo ride controls: play/pause, 1×/10×/50×, progress scrubber, "Set stop: Ayala"
 
-### ⏭ M4: Geofence logic (test-first)
+### ✅ M4: Geofence logic (test-first)
 
-- [ ] `geofence.ts`: a pure `evaluate(state, fix)` that returns `{ distanceM, status, event? }`
-- [ ] Ignore readings worse than about 150 m accuracy, or older than 15 s
-- [ ] Trigger after **2 consecutive** readings inside the radius, to filter out GPS jumps
-- [ ] **Passed-stop detection:** came within radius + accuracy, then the distance grows over 2 readings, so trigger anyway
-- [ ] Starting inside the radius is flagged so the UI can ask
-- [ ] Unit tests: normal approach, jitter at the edge, poor accuracy, stale readings, fast pass-through, starting inside; 100% coverage of `lib/geo`
+- [x] `src/lib/geo/geofence.ts`: a pure `evaluateGeofence(state, fix, destination, config, now)` that returns `{ state, distanceM, accepted, rejectReason?, event? }`
+- [x] Ignore readings worse than 150 m accuracy, older than 15 s, out of order, or an impossible jump (over 60 m/s after allowing for GPS error)
+- [x] `arrived` after **2 readings in a row** inside the radius
+- [x] **`passed`:** the path travelled between readings came within radius + accuracy, then moved away for 2 readings and at least max(accuracy, 30 m) past the closest point. Measured on the line between readings (`segment.ts`), so a fast train that skips the radius is still caught.
+- [x] `started-near`: starting within radius + accuracy is flagged; nothing rings until the user has moved clearly away
+- [x] Tests written first. They cover: normal approach, GPS noise (25 seeds), edge jitter, glitches, recovering from a bad first reading, inaccurate, stale and out-of-order readings, fast pass-through, grazing the edge, radius changes mid-ride, starting near, and the EDSA demo route.
+- [x] **Sweep:** 4 speeds × 4 reading gaps × 3 radii (48 cases) never stay silent; roads 450 m away never ring
+- [x] 100% statement, branch, function and line coverage of `src/lib/geo`, enforced in `vite.config.ts`
 
-### M5: Audio and alarm screen
+### ⏭ M5: Audio and alarm screen
 
 - [ ] Ringtone picker with preview (synthesised tones or CC0 sounds)
 - [ ] `audio.ts`: unlock, looped playback and stop, using Web Audio
@@ -191,6 +193,12 @@ Choices made during the build, and why.
 | M3   | Location starts on tap only (until M6)                              | No GPS use while the user is only planning a trip.                                                                                                                                                                  |
 | M3   | Demo route follows EDSA via MRT-3 stations and continues past Ayala | It's realistic, and running past the stop lets us test passed-stop detection in M4.                                                                                                                                 |
 | M3   | Straight-line distance                                              | A destination alarm only needs "how close am I", not the road distance.                                                                                                                                             |
+| M4   | Check the path between readings, not just the readings              | With readings 30 s apart on a fast train, no reading may land inside the radius even though the ride went straight past the stop.                                                                                   |
+| M4   | Reject impossible jumps (over 60 m/s after GPS error)               | Found while designing the tests: one glitch reading near the stop could later turn ordinary traffic jitter 800 m away into a false "passed" alarm.                                                                  |
+| M4   | On a second "jump" in a row, trust the new reading                  | If the reading we trusted was the glitch, every real reading after it looks like a jump. Without this, one bad first reading would block the alarm for the whole ride.                                              |
+| M4   | A near miss counts as "passed"                                      | Passing within radius + GPS accuracy and then moving away rings with "you may have passed your stop". Ringing slightly early costs little; staying silent costs the stop.                                           |
+| M4   | Separate "passed" from "arrived"                                    | The alarm screen can be honest ("You may have just passed your stop") instead of pretending you're arriving.                                                                                                        |
+| M4   | Coverage gate on `src/lib/geo` only                                 | 100% is worth enforcing for the logic that decides when to ring. UI code is covered by component and end-to-end tests instead. The gate also flagged two unreachable branches, which were removed.                  |
 
 ## Risks and mitigations
 
@@ -223,7 +231,7 @@ Choices made during the build, and why.
   - iPhone: use Vercel URLs with Safari Web Inspector on a Mac.
 - **Field test (M9):** a real ride with recording turned on. Recorded tracks become test fixtures.
 
-Run everything with: `npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e`
+Run everything with: `npm run lint && npm run typecheck && npm run coverage && npm run build && npm run test:e2e` (`coverage` runs the unit tests and enforces 100% on `src/lib/geo`).
 
 ## Branding
 
